@@ -1,0 +1,42 @@
+PDefs.  Program ::= [Def] ;
+
+terminator Def "";
+
+comment "//" ;
+comment "/*" "*/";
+comment "#";
+
+DFun.   Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
+separator Arg "," ;
+terminator Stm "" ;
+
+ADecl. Arg  ::= Type Id ;
+
+SExp.    Stm  ::= Exp ",";
+SDecl.   Stm  ::= Type Id ";";
+SDecls.  Stm  ::= Type Id "," [Id] ";";
+SInit.   Stm  ::= Type Id "=" Exp ";" ;
+SReturn. Stm  ::= "return" Exp ";";
+SOut.    Stm  ::=  Exp "<<" Exp "<<" Exp ";";
+
+separator Stm ";"; 
+
+EInt.       Exp15 ::= Integer;
+EString.    Exp15 ::= String;
+EId.        Exp15 ::= Id;
+EqConst.    Exp15 ::=  Id "::" Id;
+
+coercions Exp 15;
+separator Exp ",";
+
+
+Tint.    Type ::= "int";
+Tstring. Type ::= "string";
+
+token Q ('a' (':'':')*);
+
+token Id (letter (letter | digit | '_')*);
+
+
+
+separator nonempty Id ",";
