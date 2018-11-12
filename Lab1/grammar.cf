@@ -17,20 +17,28 @@ SExp.     Stm  ::= Exp ";";
 SDecl.    Stm  ::= Type Id ";";
 SDecls.   Stm  ::= Type Id "," [Id] ";";
 SInit.    Stm  ::= Type Id "=" Exp ";" ;
+SWhile.   Stm  ::= "while" "(" Exp ")" Stm;
+SBlock.   Stm  ::= "{" [Stm] "}";
+SIfElse.  Stm  ::= "if" "(" Exp ")" Stm "else" Stm;
 SReturn.  Stm  ::= "return" Exp ";";
 
 separator Stm ";"; 
 
 EInt.       Exp15 ::= Integer;
-EString.    Exp15 ::= String;
+EString.    Exp15 ::= [String];
 EId.        Exp15 ::= Id;
 EqConst.    Exp15 ::=  Qual;
 EqDecl.     Exp15 ::= Exp Id;
 EOut.       Exp14 ::= Exp "<<" Exp;
 EIn.        Exp14 ::= Exp ">>" Exp;
+ECall.      Exp15 ::= Id "(" [Exp] ")";
+ECallobj.   Exp15 ::= Exp "." Exp;
+EEq.        Exp8  ::= Exp8 "==" Exp9;
+EAss.       Exp2  ::= Exp3 "=" Exp2;
 
 coercions Exp 15;
 separator nonempty Exp ",";
+separator nonempty String "";
 
 Tint.    Type ::= "int";
 Tdouble. Type ::= "double";
