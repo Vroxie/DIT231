@@ -7,31 +7,38 @@ comment "/*" "*/";
 comment "#";
 
 DFun.   Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
+DUsing. Def  ::= "using " Qual ";";
 separator Arg "," ;
 terminator Stm "" ;
 
 ADecl. Arg  ::= Type Id ;
 
-SExp.    Stm  ::= Exp ",";
-SDecl.   Stm  ::= Type Id ";";
-SDecls.  Stm  ::= Type Id "," [Id] ";";
-SInit.   Stm  ::= Type Id "=" Exp ";" ;
-SReturn. Stm  ::= "return" Exp ";";
-SOut.    Stm  ::=  Exp "<<" Exp "<<" Exp ";";
+SExp.     Stm  ::= Exp ";";
+SDecl.    Stm  ::= Type Id ";";
+SDecls.   Stm  ::= Type Id "," [Id] ";";
+SInit.    Stm  ::= Type Id "=" Exp ";" ;
+SReturn.  Stm  ::= "return" Exp ";";
 
 separator Stm ";"; 
 
 EInt.       Exp15 ::= Integer;
 EString.    Exp15 ::= String;
 EId.        Exp15 ::= Id;
-EqConst.    Exp15 ::=  Id "::" Id;
+EqConst.    Exp15 ::=  Qual;
+EqDecl.     Exp15 ::= Exp Id;
+EOut.       Exp14 ::= Exp "<<" Exp;
+EIn.        Exp14 ::= Exp ">>" Exp;
 
 coercions Exp 15;
-separator Exp ",";
-
+separator nonempty Exp ",";
 
 Tint.    Type ::= "int";
+Tdouble. Type ::= "double";
 Tstring. Type ::= "string";
+Tqual.   Type ::= Qual;
+
+Qualifer. Qual ::= Id "::" Id;
+Qtype.    Qual ::= Id "::" Type;
 
 token Q ('a' (':'':')*);
 
