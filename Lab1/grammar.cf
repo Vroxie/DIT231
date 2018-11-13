@@ -6,8 +6,10 @@ comment "//" ;
 comment "/*" "*/";
 comment "#";
 
-DFun.   Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
-DUsing. Def  ::= "using " Qual ";";
+DFun.    Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
+DUsing.  Def  ::= "using " Qual ";";
+DTypdef. Def  ::= TDef";";
+
 separator Arg "," ;
 terminator Stm "" ;
 
@@ -19,14 +21,21 @@ SDecls.   Stm  ::= Type Id "," [Id] ";";
 SInit.    Stm  ::= Type Id "=" Exp ";" ;
 SWhile.   Stm  ::= "while" "(" Exp ")" Stm;
 SBlock.   Stm  ::= "{" [Stm] "}";
+SIf.      Stm  ::= "if" "(" Exp ")" Stm;
 SIfElse.  Stm  ::= "if" "(" Exp ")" Stm "else" Stm;
 SReturn.  Stm  ::= "return" Exp ";";
+STypedef. Stm  ::= TDef";";
 
-separator Stm ";"; 
+
+separator Stm ""; 
 
 EInt.       Exp15 ::= Integer;
 EString.    Exp15 ::= [String];
 EId.        Exp15 ::= Id;
+EPlus.      Exp11 ::= Exp11 "+" Exp12;
+--EMul.       Exp12 ::= Exp12 "*" Exp13;
+--EMinus.     Exp11 ::= Exp11 "-" Exp12;
+--EDiv.       Exp12 ::= Exp12 "/" Exp13;
 EqConst.    Exp15 ::=  Qual;
 EqDecl.     Exp15 ::= Exp Id;
 EOut.       Exp14 ::= Exp "<<" Exp;
@@ -35,6 +44,7 @@ ECall.      Exp15 ::= Id "(" [Exp] ")";
 ECallobj.   Exp15 ::= Exp "." Exp;
 EEq.        Exp8  ::= Exp8 "==" Exp9;
 EAss.       Exp2  ::= Exp3 "=" Exp2;
+ECond.      Exp2  ::= Exp3 "?" Exp2 ":" Exp;
 
 coercions Exp 15;
 separator nonempty Exp ",";
@@ -48,7 +58,8 @@ Tqual.   Type ::= Qual;
 Qualifer. Qual ::= Id "::" Id;
 Qtype.    Qual ::= Id "::" Type;
 
-token Q ('a' (':'':')*);
+TypeDef.    TDef ::= "typedef" Type Id;
+
 
 token Id (letter (letter | digit | '_')*);
 
