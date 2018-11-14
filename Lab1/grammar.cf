@@ -12,11 +12,12 @@ DTypdef.    Def  ::= TDef";";
 
 separator Arg "," ;
 
-ADecl. Arg  ::= Type Id ;
+ADecl.    Arg  ::= Type Id ;
+AQconst.  Arg  ::= Qual Id;
+
 
 SExp.       Stm  ::= Exp ";";
-SDecl.      Stm  ::= Type Id ";";
-SConstDecl. Stm  ::= "const" Type Id ";"; 
+SDecl.      Stm  ::= Type Id ";"; 
 SDecls.     Stm  ::= Type Id "," [Id] ";";
 SInit.      Stm  ::= Type Id "=" Exp ";" ;
 SWhile.     Stm  ::= "while" "(" Exp ")" Stm;
@@ -30,6 +31,7 @@ separator Stm "";
 
 EInt.       Exp15 ::= Integer;
 EString.    Exp15 ::= [String];
+EChar.      Exp15 ::= Char;
 --EId.      Exp15 ::= Id;
 EIndex.     Exp14 ::= Exp15"["Exp11"]";
 EPlus.      Exp11 ::= Exp11 "+" Exp12;
@@ -39,11 +41,11 @@ EDiv.       Exp12 ::= Exp12 "/" Exp13;
 EModulo.    Exp12 ::= Exp12 "%" Exp13;
 EqConst.    Exp15 ::= Qual;
 EqDecl.     Exp15 ::= Exp15 Id;
-EOut.       Exp14 ::= Exp14 "<<" Exp14;
-EIn.        Exp14 ::= Exp14 ">>" Exp14;
+EOut.       Exp5  ::= Exp5 "<<" Exp4;
+EIn.        Exp5  ::= Exp5 ">>" Exp4;
 ECall.      Exp15 ::= Id "(" [Exp] ")";
 ECallobj.   Exp15 ::= Exp15 "." Exp15;
-EEq.        Exp8  ::= Exp8 "==" Exp9;
+EEq.        Exp7  ::= Exp8 "==" Exp7;
 EAss.       Exp2  ::= Exp3 "=" Exp2;
 ECond.      Exp2  ::= Exp3 "?" Exp1 ":" Exp2;
 EThrow.     Exp1  ::= "throw" Exp15;
@@ -52,13 +54,17 @@ coercions Exp 15;
 separator Exp ",";
 separator nonempty String "";
 
-Tint.    Type ::= "int";
-Tdouble. Type ::= "double";
---Tstring. Type ::= "string";
---Tqual.   Type ::= QualType;
+Tint.     Type ::= "int";
+Tdouble.  Type ::= "double";
+Tbool.    Type ::= "bool";
+Tchar.    Type ::= "char";
+TPoint.   Type ::= Type "&";
+TConst.   Type ::= "const" Type;
 
 Qualifer. Qual ::= Id "::" Qual;
 Qtype.    Qual ::= Id;
+Qconst.   Qual ::= "const" Qual "&";
+
 
 
 TypeDef.     TDef ::= "typedef" Qual Id;
