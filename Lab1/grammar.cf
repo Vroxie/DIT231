@@ -7,13 +7,17 @@ comment "/*" "*/";
 comment "#";
 
 DFun.       Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
+DFunQ.      Def  ::= Qual Id "(" [Arg] ")" "{" [Stm] "}";
 DUsing.     Def  ::= "using " Qual ";";
 DTypdef.    Def  ::= TDef";";
 
 separator Arg "," ;
 
-ADecl.    Arg  ::= Type Id ;
-AQconst.  Arg  ::= Qual Id;
+ADecl.          Arg  ::= Type Id ;
+AQconst.        Arg  ::= Qual Id;
+AQ.             Arg  ::= Qual;
+AVarwithId.     Arg  ::= Var Id;
+AVar.           Arg  ::= Var;
 
 
 SExp.       Stm  ::= Exp ";";
@@ -41,10 +45,11 @@ EDiv.       Exp12 ::= Exp12 "/" Exp13;
 EModulo.    Exp12 ::= Exp12 "%" Exp13;
 EqConst.    Exp15 ::= Qual;
 EqDecl.     Exp15 ::= Exp15 Id;
+ENot.       Exp13 ::= "!" Exp14;
 EOut.       Exp5  ::= Exp5 "<<" Exp4;
 EIn.        Exp5  ::= Exp5 ">>" Exp4;
 ECall.      Exp15 ::= Id "(" [Exp] ")";
-ECallobj.   Exp15 ::= Exp15 "." Exp15;
+ECallobj.   Exp14 ::= Exp14 "." Exp15;
 EEq.        Exp7  ::= Exp8 "==" Exp7;
 EAss.       Exp2  ::= Exp3 "=" Exp2;
 ECond.      Exp2  ::= Exp3 "?" Exp1 ":" Exp2;
@@ -60,11 +65,13 @@ Tbool.    Type ::= "bool";
 Tchar.    Type ::= "char";
 TPoint.   Type ::= Type "&";
 TConst.   Type ::= "const" Type;
+TVoid.    Type ::= "void";
 
 Qualifer. Qual ::= Id "::" Qual;
 Qtype.    Qual ::= Id;
-Qconst.   Qual ::= "const" Qual "&";
+QconstP.  Qual ::= Qual "&";
 
+ConstVar.  Var  ::= "const" Qual;
 
 
 TypeDef.     TDef ::= "typedef" Qual Id;
