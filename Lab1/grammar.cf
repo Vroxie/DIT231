@@ -12,6 +12,9 @@ DFunc.      Def  ::= Type Id "(" [Arg] ")" ";";
 --DFuncQ.     Def  ::= Qual Id "(" [Arg] ")" ";";
 DUsing.     Def  ::= "using " Qual ";";
 DTypdef.    Def  ::= TDef";";
+DDecl.      Def  ::= Type Id ";";
+DDecls.     Def  ::= Type Id "," [Id] ";";
+DInit.      Def  ::= Type Id "=" Exp ";" ;
 
 separator Arg "," ;
 
@@ -23,12 +26,16 @@ ADeclT.         Arg  ::= Type;
 --AVar.           Arg  ::= Var;
 
 
+
+
 SExp.       Stm  ::= Exp ";";
+
 SDecl.      Stm  ::= Type Id ";";
 --SQDecl.     Stm  ::= Qual Id ";"; 
 SDecls.     Stm  ::= Type Id "," [Id] ";";
 --SQDecls.    Stm  ::= Qual Id "," [Id] ";";
 SInit.      Stm  ::= Type Id "=" Exp ";" ;
+
 SWhile.     Stm  ::= "while" "(" Exp ")" Stm;
 SDoWhile.   Stm  ::= "do" Stm "while" "(" Exp ")" ";";
 SFor.       Stm  ::= "for" "(" Type Id "=" Stm  Exp ";"Exp ")" Stm;
