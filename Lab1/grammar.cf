@@ -9,44 +9,38 @@ comment "#";
 DFun.       Def  ::= Type Id "(" [Arg] ")" "{" [Stm] "}" ;
 DFunQ.      Def  ::= Qual Id "(" [Arg] ")" "{" [Stm] "}";
 DFunc.      Def  ::= Type Id "(" [Arg] ")" ";";
---DFuncQ.     Def  ::= Qual Id "(" [Arg] ")" ";";
+DFuncQ.     Def  ::= Qual Id "(" [Arg] ")" ";";
 DUsing.     Def  ::= "using " Qual ";";
-DTypdef.    Def  ::= TDef";";
-DDecl.      Def  ::= Type Id ";";
-DDecls.     Def  ::= Type Id "," [Id] ";";
-DInit.      Def  ::= Type Id "=" Exp ";" ;
+DTypdef.    Def  ::= DefStm ";";
 
 separator Arg "," ;
 
+TypeDef.    DefStm  ::= "typedef" Type Id;
+InitDef.    DefStm  ::= Type [Var];
+InitQDef.   DefStm  ::= Qual Id "=" Exp;
+
+VarQual.    Var ::= Qual;
+VarAssign.  Var ::= Qual "=" Exp;
+
+
+separator nonempty Var ",";
+
+
 ADecl.          Arg  ::= Type Id ;
 ADeclT.         Arg  ::= Type;
---AQconst.        Arg  ::= Qual Id;
---AQ.             Arg  ::= Qual;
---AVarwithId.     Arg  ::= Var Id;
---AVar.           Arg  ::= Var;
 
-
-
-
+ 
 SExp.       Stm  ::= Exp ";";
-
-SDecl.      Stm  ::= Type Id ";";
---SQDecl.     Stm  ::= Qual Id ";"; 
-SDecls.     Stm  ::= Type Id "," [Id] ";";
---SQDecls.    Stm  ::= Qual Id "," [Id] ";";
-SInit.      Stm  ::= Type Id "=" Exp ";" ;
-
+SDef.       Stm  ::= DefStm ";";
+SQDecls.    Stm  ::= Qual Id "," [Id] ";";
 SWhile.     Stm  ::= "while" "(" Exp ")" Stm;
 SDoWhile.   Stm  ::= "do" Stm "while" "(" Exp ")" ";";
 SFor.       Stm  ::= "for" "(" Type Id "=" Stm  Exp ";"Exp ")" Stm;
---SForQ.      Stm  ::= "for" "(" Qual Id ";" Exp ";"Exp ")" Stm;
---SForQIn.    Stm  ::= "for" "(" Qual Id "=" Stm  Exp ";"Exp ")" Stm;
---SForVar.    Stm  ::= "for" "(" Var Id "=" Stm  Exp ";"Exp ")" Stm;
+SFor2.      Stm  ::= "for" "(" Type Id ";" Exp ";" Exp ")" Stm;
 SBlock.     Stm  ::= "{" [Stm] "}";
 SIf.        Stm  ::= "if" "(" Exp ")" Stm;
 SIfElse.    Stm  ::= "if" "(" Exp ")" Stm "else" Stm;
 SReturn.    Stm  ::= "return" Exp ";";
-STypedef.   Stm  ::= TDef";";
 
 separator Stm ""; 
 
@@ -54,8 +48,7 @@ EInt.       Exp15 ::= Integer;
 EString.    Exp15 ::= [String];
 EChar.      Exp15 ::= Char;
 EDouble.    Exp15 ::= Double;
---EId.      Exp15 ::= Id;
-EIndex.     Exp14 ::= Exp15"["Exp11"]";
+EIndex.     Exp15 ::= Exp15"["Exp9"]";
 EPlus.      Exp11 ::= Exp11 "+" Exp12;
 EMul.       Exp12 ::= Exp12 "*" Exp13;
 EMinus.     Exp11 ::= Exp11 "-" Exp12;
@@ -63,21 +56,19 @@ EDiv.       Exp12 ::= Exp12 "/" Exp13;
 EModulo.    Exp12 ::= Exp12 "%" Exp13;
 EqConst.    Exp15 ::= Qual;
 EqConstId.  Exp15 ::= Qual Id;
---EVar.       Exp15 ::= Var;
---EVarId.     Exp15 ::= Var Id;
-ENot.       Exp13 ::= "!" Exp14;
-EIncrR.     Exp14 ::= "++" Exp15;
-EIncrL.     Exp14 ::= Exp15 "++";
-EDecrR.     Exp14 ::= "--" Exp15;
-EDecrL.     Exp14 ::= Exp15 "--";
-EPointstar. Exp14 ::= "*" Exp15;
+ENot.       Exp13 ::= "!" Exp13;
+EIncrR.     Exp13 ::= "++" Exp13;
+EIncrL.     Exp14 ::= Exp14 "++";
+EDecrR.     Exp13 ::= "--" Exp13;
+EDecrL.     Exp14 ::= Exp14 "--";
+EPointstar. Exp13 ::= "*" Exp13;
 EOut.       Exp10 ::= Exp10 "<<" Exp11;
 EIn.        Exp10 ::= Exp10 ">>" Exp11;
 ECompLeft.  Exp9  ::= Exp9 ">" Exp10;
 EComRight.  Exp9  ::= Exp9 "<" Exp10;
 ELEq.       Exp9  ::= Exp9 ">=" Exp10;
 EREq.       Exp9  ::= Exp9 "<=" Exp10;
-ECall.      Exp15 ::= Id "(" [Exp] ")";
+ECall.      Exp15 ::= Exp15 "(" [Exp] ")";
 ECallobj.   Exp14 ::= Exp14 "." Exp15;
 EEq.        Exp8  ::= Exp8 "==" Exp9;
 ENotEq.     Exp8  ::= Exp8 "!=" Exp9;
@@ -103,18 +94,13 @@ TVoid.    SubType ::= "void";
 TQ.       SubType ::= Qual;
 
 Qualifer. Qual ::= Id "::" Qual;
-Qtype.    Qual ::= Id;
---QconstP.  Qual ::= Qual [Ref];
+QI.       Qual ::= Id;
 
 ConstTypeVar. Type  ::= "const" SubType;
 ConstType.    Type  ::= SubType;
 
 Refen.        Ref   ::= "&";
 separator nonempty Ref " ";
-
---TypeDefQ.     TDef ::= "typedef" Qual Id;
-TypeDefT.     TDef ::= "typedef" Type Id;
-
 
 token Id (letter (letter | digit | '_')*);
 
