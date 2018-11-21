@@ -45,3 +45,105 @@ updateHelp context id = case Map.lookup id (head context) of
         (Just a) -> (True,(Map.update (return (Just a) ) id (head context)) : (tail context))
         otherwise -> let (b, ctx) = updateHelp (tail context) id
                      in (b, (head context) : ctx)
+
+
+newBlock :: Env -> Env
+newBlock (sig,context) = (sig, Map.empty : context)
+
+emptyEnv :: Env
+emptyEnv = (Map.empty,[])
+
+--helper :: Eq a, Monad m => [a] -> [m a] -> Bool
+--helper xs ys = undefined
+
+checkIncDec :: Env -> Id -> Err Type
+checkIncDec env id = do
+        a <- lookupVar env id
+        case a == Type_int of
+                True -> return Type_int
+                False -> fail $ (show id) ++ " must be a Integer! Actual type: " ++ (show a)
+
+inferBin :: [Type] -> Env -> Exp -> Exp -> Err Type
+inferBin types env exp1 exp2 = do
+        typ <- inferExp env exp1
+        if elem typ types
+                then
+                        checkExp env typ exp2
+                else
+                        fail $ "wrong type of expression " ++ printTree exp1
+
+
+checkExp :: Env -> Type -> Exp -> Err Type
+checkExp env typ exp = do
+        typ2 <- inferExp env exp
+        if (typ2 == typ) then
+                return typ2
+         else
+                fail $ "type of " ++ printTree exp ++
+                       "expected " ++ printTree typ ++
+                       "but found " ++ printTree typ2
+
+inferBinComp :: [Type] -> Env -> Exp -> Exp -> Err Type
+inferBinComp types env exp1 exp2 = do
+        typ <- inferExp env exp1
+        if elem typ types
+                then
+                        checkExpComp env typ exp2
+                else
+                        fail $ "wrong type of expression " ++ printTree exp1
+
+
+checkExpComp :: Env -> Type -> Exp -> Err Type
+checkExpComp env typ exp = do
+        typ2 <- inferExp env exp
+        if (typ2 == typ) then
+                return Type_bool
+         else
+                fail $ "type of " ++ printTree exp ++
+                       "expected " ++ printTree typ ++
+                       "but found " ++ printTree typ2
+
+
+
+
+inferExp :: Env -> Exp -> Err Type
+inferExp env x = case x of
+        ETrue -> return Type_bool
+        EFalse -> return Type_bool
+        EInt i -> return Type_int
+        EDouble d -> return Type_double
+        EId id -> lookupVar env id
+        EApp id exp -> do
+                (args, ret) <- lookupFun env id
+                let inferredExps = map (inferExp env) exp
+                let okargs = map Ok args
+                case inferredExps == okargs of
+                        True -> return ret
+                        False -> fail $ "The name of the method is right but the return type is wrong!"
+
+        EPostIncr id -> checkIncDec env id
+        EPostDecr id -> checkIncDec env id
+        EPreIncr id -> checkIncDec env id
+        EPreDecr id -> checkIncDec env id
+        ETimes exp1 exp2 -> inferBin [Type_int,Type_double] env exp1 exp2
+        EDiv exp1 exp2 -> inferBin [Type_int,Type_double] env exp1 exp2
+        EPlus exp1 exp2 -> inferBin [Type_int,Type_double] env exp1 exp2
+        EMinus exp1 exp2 -> inferBin [Type_int,Type_double] env exp1 exp2
+        ELt exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
+        EGt exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
+        ELtEq exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
+        EGtEq exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
+        EEq exp1 exp2   -> inferBin [Type_int,Type_double,Type_bool] env exp1 exp2
+        ENEq exp1 exp2  -> inferBin [Type_int,Type_double,Type_bool] env exp1 exp2
+        EAnd exp1 exp2  -> inferBin [Type_bool] env exp1 exp2
+        EOr  exp1 exp2  -> inferBin [Type_bool] env exp1 exp2
+        EAss id exp     -> do
+                a <- lookupVar env id
+                expErr <- inferExp env exp
+                case a == expErr of
+                        True -> return a
+                        False ->  fail $ "Variable with type " ++ (show a) ++ " cannot be assigned to type " ++ (show expErr)
+
+        
+             
+        
