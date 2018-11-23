@@ -3,6 +3,7 @@ module TypeChecker where
 import Control.Monad
 
 import Data.Map (Map)
+import Data.Foldable
 import qualified Data.Map as Map
 
 import CPP.Abs
@@ -13,8 +14,8 @@ type Env = (Sig,[Context])
 type Sig = Map Id ([Type],Type)
 type Context = Map Id Type
 
-typecheck :: Program -> Err ()
-typecheck p = return ()
+typecheck :: Program -> Err Bool
+typecheck p = return True
 
 lookupVar :: Env -> Id -> Err Type
 lookupVar (_,[]) id = fail $ "Cannot resolve symbol " ++ (show id)
@@ -28,9 +29,9 @@ lookupFun (sig,context) id = case Map.lookup id sig of
         otherwise -> fail $ "Cannot resolve symbol " ++ (show id)
 
 
-updateVar :: Env -> Id -> Err Env
-updateVar (sig,context) id = case updateHelp context id of
-        (False,_) -> fail $ "cannot resolve symbol " ++ (show id)
+updateVar :: Env -> Id -> Type -> Err Env
+updateVar (sig,context) id typ = case updateHelp context id of
+        (False,_) -> return $ (sig,(Map.insert id typ (head context)) : (tail context))
         (True, ctx) -> return $ (sig, ctx)
 
 updateFun :: Env -> Id -> ([Type], Type) -> Err Env
@@ -45,7 +46,6 @@ updateHelp context id = case Map.lookup id (head context) of
         (Just a) -> (True,(Map.update (return (Just a) ) id (head context)) : (tail context))
         otherwise -> let (b, ctx) = updateHelp (tail context) id
                      in (b, (head context) : ctx)
-
 
 newBlock :: Env -> Env
 newBlock (sig,context) = (sig, Map.empty : context)
@@ -144,6 +144,41 @@ inferExp env x = case x of
                         True -> return a
                         False ->  fail $ "Variable with type " ++ (show a) ++ " cannot be assigned to type " ++ (show expErr)
 
-        
+                        
+
              
-        
+checkStm :: Env -> Type -> Stm -> Err Env
+checkStm env val x = case x of
+        SExp exp -> do
+                inferExp env exp
+                return env
+        SDecls typ ids -> do
+                declcenv <- foldlM (\env_X id -> updateVar env_X id typ) env ids
+                return declcenv
+        SInit typ id exp -> do
+                declsexp <- inferExp env exp
+                case declsexp == typ of
+                        True -> updateVar env id typ
+                        False -> fail $ "Variable with type " ++ (show typ) ++ " cannot be assigned to type " ++ (show declsexp)
+        SWhile exp stm -> do
+                checkExp env Type_bool exp
+                checkStm env val stm
+        SBlock stms -> checkStms env val stms
+        SIfElse exp stm1 stm2 -> do
+                checkExp env Type_bool exp
+                checkStms env val [stm1,stm2]
+        SReturn exp -> do
+                rexp <- inferExp env exp
+                case rexp == val of
+                        True -> return env
+                        False -> fail $ "You are returning the type " ++ (show rexp) ++ " when you are supposed to return " ++ (show val)
+
+
+
+
+checkStms :: Env -> Type -> [Stm] -> Err Env
+checkStms env typ stms = case stms of
+        [] -> return env
+        x : rest -> do
+                env' <- checkStm env typ x
+                checkStms env' typ rest
