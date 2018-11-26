@@ -14,25 +14,61 @@ type Env = (Sig,[Context])
 type Sig = Map Id ([Type],Type)
 type Context = Map Id Type
 
-typecheck :: Program -> Err Bool
-typecheck p = return True
+typecheck :: Program -> Err Env
+typecheck (PDefs defs) = do
+                let sig = createSig defs
+                let env = newBlock (sig,[])
+                foldlM (\env_X def -> checkDef env_X def ) env defs
+
+createSig :: [Def] -> Sig
+createSig defs = Map.fromList (map defToSig defs)
+
+checkDef :: Env -> Def -> Err Env
+checkDef env def = case def of
+        DFun typ id args stms -> checkStms env typ stms
+
+
+defToSig :: Def -> (Id,([Type],Type))
+defToSig def = case def of
+        DFun typ id args stms -> (id,((map argsToType args),typ))
+
+argsToType :: Arg -> Type
+argsToType arg = case arg of
+        ADecl typ id -> typ
 
 lookupVar :: Env -> Id -> Err Type
 lookupVar (_,[]) id = fail $ "Cannot resolve symbol " ++ (show id)
 lookupVar (sig,context) id = case Map.lookup id (head context) of
-        (Just a) -> return a
+        (Just a) -> case noDuplicateVar (sig,context) id of
+                True -> return a
+                False -> fail $ "Variable with name " ++ (show id) ++ " has already been taken!"
         otherwise -> lookupVar (sig, tail context) id
+
+noDuplicateVar :: Env -> Id -> Bool
+noDuplicateVar (_,[]) id = True
+noDuplicateVar (sig,context) id = case Map.lookup id (head context) of
+        (Just a) -> False 
+        otherwise -> noDuplicateVar (sig,tail context) id
+
+noDuplicateFun :: Env -> Id -> Bool
+noDuplicateFun (sig,context) id = case Map.lookup id sig of
+        (Just a) -> True
+        otherwise -> False        
 
 lookupFun :: Env -> Id -> Err ([Type], Type)
 lookupFun (sig,context) id = case Map.lookup id sig of
-        (Just a) -> return a
+        (Just a) -> case noDuplicateFun (sig,context) id of
+                True -> return a
+                False -> fail $ "That function is already implemented!"
         otherwise -> fail $ "Cannot resolve symbol " ++ (show id)
 
 
 updateVar :: Env -> Id -> Type -> Err Env
 updateVar (sig,context) id typ = case updateHelp context id of
         (False,_) -> return $ (sig,(Map.insert id typ (head context)) : (tail context))
-        (True, ctx) -> return $ (sig, ctx)
+        (True, ctx) -> case noDuplicateVar (sig,context) id of
+                True -> return $ (sig, ctx)
+                False -> fail $ "Variable with name " ++ (show id) ++ " has already been taken!"
 
 updateFun :: Env -> Id -> ([Type], Type) -> Err Env
 updateFun (sig,context) id fun = case Map.lookup id sig of
@@ -49,6 +85,9 @@ updateHelp context id = case Map.lookup id (head context) of
 
 newBlock :: Env -> Env
 newBlock (sig,context) = (sig, Map.empty : context)
+
+popBlock :: Env -> Env
+popBlock (sig,context) = (sig, (tail context))
 
 emptyEnv :: Env
 emptyEnv = (Map.empty,[])
@@ -80,8 +119,8 @@ checkExp env typ exp = do
                 return typ2
          else
                 fail $ "type of " ++ printTree exp ++
-                       "expected " ++ printTree typ ++
-                       "but found " ++ printTree typ2
+                       " expected " ++ printTree typ ++
+                       " but found " ++ printTree typ2
 
 inferBinComp :: [Type] -> Env -> Exp -> Exp -> Err Type
 inferBinComp types env exp1 exp2 = do
@@ -144,17 +183,17 @@ inferExp env x = case x of
                         True -> return a
                         False ->  fail $ "Variable with type " ++ (show a) ++ " cannot be assigned to type " ++ (show expErr)
 
-                        
 
-             
 checkStm :: Env -> Type -> Stm -> Err Env
 checkStm env val x = case x of
         SExp exp -> do
                 inferExp env exp
                 return env
-        SDecls typ ids -> do
-                declcenv <- foldlM (\env_X id -> updateVar env_X id typ) env ids
-                return declcenv
+        SDecls typ ids -> case not (typ == Type_void) of
+                True -> do
+                        declcenv <- foldlM (\env_X id -> updateVar env_X id typ) env ids
+                        return declcenv
+                False -> fail $ "Cant declare variable with type void!"
         SInit typ id exp -> do
                 declsexp <- inferExp env exp
                 case declsexp == typ of
@@ -162,8 +201,9 @@ checkStm env val x = case x of
                         False -> fail $ "Variable with type " ++ (show typ) ++ " cannot be assigned to type " ++ (show declsexp)
         SWhile exp stm -> do
                 checkExp env Type_bool exp
-                checkStm env val stm
-        SBlock stms -> checkStms env val stms
+                checkStm (newBlock env) val stm
+                return env
+        SBlock stms -> checkStms (newBlock env) val stms
         SIfElse exp stm1 stm2 -> do
                 checkExp env Type_bool exp
                 checkStms env val [stm1,stm2]
@@ -176,9 +216,11 @@ checkStm env val x = case x of
 
 
 
+
+
 checkStms :: Env -> Type -> [Stm] -> Err Env
 checkStms env typ stms = case stms of
-        [] -> return env
+        [] -> return $ popBlock env
         x : rest -> do
                 env' <- checkStm env typ x
                 checkStms env' typ rest
