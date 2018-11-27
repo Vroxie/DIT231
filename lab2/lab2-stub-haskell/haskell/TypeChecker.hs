@@ -18,6 +18,7 @@ typecheck :: Program -> Err Env
 typecheck (PDefs defs) = do
                 let sig = createSig defs
                 let env = newBlock (sig,[])
+                lookupMain env
                 foldlM (\env_X def -> checkDef env_X def ) env defs
 
 createSig :: [Def] -> Sig
@@ -35,6 +36,13 @@ defToSig def = case def of
 argsToType :: Arg -> Type
 argsToType arg = case arg of
         ADecl typ id -> typ
+
+lookupMain :: Env -> Err Env
+lookupMain (sig,context) = do
+        let id = Id "main" 
+        case Map.lookup id sig of
+         (Just a) -> return (sig,context)
+         otherwise -> fail $ "Missing a main() function!" 
 
 lookupVar :: Env -> Id -> Err Type
 lookupVar (_,[]) id = fail $ "Cannot resolve symbol " ++ (show id)
@@ -59,7 +67,7 @@ lookupFun :: Env -> Id -> Err ([Type], Type)
 lookupFun (sig,context) id = case Map.lookup id sig of
         (Just a) -> case noDuplicateFun (sig,context) id of
                 True -> return a
-                False -> fail $ "That function is already implemented!"
+                False -> fail $ "There are two functions with the same name!"
         otherwise -> fail $ "Cannot resolve symbol " ++ (show id)
 
 
