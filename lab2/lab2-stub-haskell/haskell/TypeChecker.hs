@@ -14,17 +14,30 @@ type Env = (Sig,[Context])
 type Sig = Map Id ([Type],Type)
 type Context = Map Id Type
 
-typecheck :: Program -> Err Env
+typecheck :: Program -> Err ()
 typecheck (PDefs defs) = do
                 let sig = createSig defs
                 let env = newBlock (sig,[])
                 lookupMain env
+                checkDefNames env defs
                 foldlM (\env_X def -> checkDefArgs env_X def ) env defs
-                foldlM (\env_X def -> checkDef env_X def ) env defs
+                mapM_ (checkDef env) defs
+
+                --return ()
 
 createSig :: [Def] -> Sig
 createSig defs = Map.fromList (map defToSig defs)
 
+genDefName :: Def -> Id
+genDefName (DFun typ id args stms) = id
+
+genDefNames :: [Def] -> [Id]
+genDefNames defs = map genDefName defs ++ [Id "printInt",Id "printDouble",Id "readInt", Id "readDouble"]
+
+checkDefNames :: Env -> [Def] -> Err Env
+checkDefNames env [] = return env
+checkDefNames env defs | elem (head (genDefNames defs)) (tail (genDefNames defs)) = fail $ "Each function name must be unique!"
+                       | otherwise = checkDefNames env (tail defs)
 
 checkDef :: Env -> Def -> Err Env
 checkDef env def = case def of
@@ -60,7 +73,7 @@ isIntReturn :: ([Type],Type) -> Bool
 isIntReturn (args,typ) = typ == Type_int
 
 lookupVar :: Env -> Id -> Err Type
-lookupVar (_,[]) id = fail $ "Cannot resolve symbol " ++ (show id)
+lookupVar (sig,[]) id = fail $ "Cannot resolve symbol " ++ (show id)  
 lookupVar (sig,context) id = case Map.lookup id (head context) of
         (Just a) -> case noDuplicateVar (sig,context) id of
                 True -> return a
@@ -80,9 +93,7 @@ noDuplicateFun (sig,context) id = case Map.lookup id sig of
 
 lookupFun :: Env -> Id -> Err ([Type], Type)
 lookupFun (sig,context) id = case Map.lookup id sig of
-        (Just a) -> case noDuplicateFun (sig,context) id of
-                True -> return a
-                False -> fail $ "There are two functions with the same name!"
+        (Just a) -> return a
         otherwise -> fail $ "Cannot resolve symbol " ++ (show id)
 
 hasVoidasArg :: ([Type],Type) -> Bool
@@ -228,12 +239,15 @@ checkStm env val x = case x of
                         False -> fail $ "Variable with type " ++ (show typ) ++ " cannot be assigned to type " ++ (show declsexp)
         SWhile exp stm -> do
                 checkExp env Type_bool exp
-                checkStm (newBlock env) val stm
+                env' <- checkStm (newBlock env) val stm
                 return env
-        SBlock stms -> checkStms (newBlock env) val stms
+        SBlock stms ->  do 
+                env' <- checkStms (newBlock env) val stms
+                return env
         SIfElse exp stm1 stm2 -> do
                 checkExp env Type_bool exp
-                checkStms env val [stm1,stm2]
+                env'<- checkStms env val [stm1,stm2]
+                return env
         SReturn exp -> do
                 rexp <- inferExp env exp
                 case rexp == val of
@@ -247,7 +261,7 @@ checkStm env val x = case x of
 
 checkStms :: Env -> Type -> [Stm] -> Err Env
 checkStms env typ stms = case stms of
-        [] -> return $ popBlock env
+        [] -> return $ env
         x : rest -> do
                 env' <- checkStm env typ x
                 checkStms env' typ rest
