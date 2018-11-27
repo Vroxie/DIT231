@@ -19,14 +19,24 @@ typecheck (PDefs defs) = do
                 let sig = createSig defs
                 let env = newBlock (sig,[])
                 lookupMain env
+                foldlM (\env_X def -> checkDefArgs env_X def ) env defs
                 foldlM (\env_X def -> checkDef env_X def ) env defs
 
 createSig :: [Def] -> Sig
 createSig defs = Map.fromList (map defToSig defs)
 
+
 checkDef :: Env -> Def -> Err Env
 checkDef env def = case def of
         DFun typ id args stms -> checkStms env typ stms
+
+checkDefArgs :: Env -> Def -> Err Env
+checkDefArgs env (DFun typ id args stms) = foldlM (\env_X arg -> checkArg env_X arg ) env args
+
+checkArg :: Env -> Arg -> Err Env
+checkArg env (ADecl typ id) = case typ == Type_void of
+        True -> fail $ "Arguments with type void is not allowed!"
+        False -> return env
 
 
 defToSig :: Def -> (Id,([Type],Type))
@@ -41,8 +51,13 @@ lookupMain :: Env -> Err Env
 lookupMain (sig,context) = do
         let id = Id "main" 
         case Map.lookup id sig of
-         (Just a) -> return (sig,context)
-         otherwise -> fail $ "Missing a main() function!" 
+         (Just a) -> case isIntReturn a of
+                True -> return (sig,context)
+                False -> fail $ "Your main function has the wrong type! It should be int!"
+         otherwise -> fail $ "Missing a main() function!"
+
+isIntReturn :: ([Type],Type) -> Bool
+isIntReturn (args,typ) = typ == Type_int
 
 lookupVar :: Env -> Id -> Err Type
 lookupVar (_,[]) id = fail $ "Cannot resolve symbol " ++ (show id)
@@ -70,6 +85,10 @@ lookupFun (sig,context) id = case Map.lookup id sig of
                 False -> fail $ "There are two functions with the same name!"
         otherwise -> fail $ "Cannot resolve symbol " ++ (show id)
 
+hasVoidasArg :: ([Type],Type) -> Bool
+hasVoidasArg ([],_) = False
+hasVoidasArg(types,typ) | (head types) == Type_void = True
+                        | otherwise = hasVoidasArg ((tail types),typ)
 
 updateVar :: Env -> Id -> Type -> Err Env
 updateVar (sig,context) id typ = case updateHelp context id of
