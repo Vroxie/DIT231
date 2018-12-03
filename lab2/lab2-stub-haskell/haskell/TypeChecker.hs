@@ -16,7 +16,7 @@ type Context = Map Id Type
 
 typecheck :: Program -> Err ()
 typecheck (PDefs defs) = do
-                let sig = createSig defs
+                let sig = Map.union (Map.fromList addBuiltinFun) (createSig defs)
                 let env = newBlock (sig,[])
                 lookupMain env
                 checkDefNames env defs
@@ -28,6 +28,18 @@ typecheck (PDefs defs) = do
 createSig :: [Def] -> Sig
 createSig defs = Map.fromList (map defToSig defs)
 
+addBuiltinFun :: [(Id,([Type],Type))]
+addBuiltinFun = [((Id "printInt"),([Type_int],Type_void)),((Id "printDouble"),([Type_double],Type_void)),((Id "readInt"),([],Type_int)),((Id "readDouble"),([],Type_double))]
+
+
+addParams :: Env -> [Arg] -> Err Env
+addParams env [] = return env
+addParams (sig,[]) ((ADecl typ id) : args) = addParams (sig,[Map.singleton id typ]) args  
+addParams (sig,context:ctx) ((ADecl typ id) : args) = case Map.lookup id context of
+        (Just a) -> fail $ "Variable with name " ++ (show id) ++ " already exists!"
+        otherwise -> addParams (sig,nContext:ctx) args
+                     where nContext = Map.insert id typ context  
+ 
 genDefName :: Def -> Id
 genDefName (DFun typ id args stms) = id
 
@@ -41,7 +53,9 @@ checkDefNames env defs | elem (head (genDefNames defs)) (tail (genDefNames defs)
 
 checkDef :: Env -> Def -> Err Env
 checkDef env def = case def of
-        DFun typ id args stms -> checkStms env typ stms
+        DFun typ id args stms -> do
+                env' <- addParams env args 
+                checkStms env' typ stms
 
 checkDefArgs :: Env -> Def -> Err Env
 checkDefArgs env (DFun typ id args stms) = foldlM (\env_X arg -> checkArg env_X arg ) env args
@@ -65,26 +79,30 @@ lookupMain (sig,context) = do
         let id = Id "main" 
         case Map.lookup id sig of
          (Just a) -> case isIntReturn a of
-                True -> return (sig,context)
+                True -> case funHasNoArg a of
+                        True -> return (sig,context)
+                        False -> fail $ "Your main function should not have arguments!"
                 False -> fail $ "Your main function has the wrong type! It should be int!"
          otherwise -> fail $ "Missing a main() function!"
 
 isIntReturn :: ([Type],Type) -> Bool
 isIntReturn (args,typ) = typ == Type_int
 
+funHasNoArg :: ([Type],Type) -> Bool
+funHasNoArg ([],typ) = True
+funHasNoArg(args,typ) = False
+
 lookupVar :: Env -> Id -> Err Type
 lookupVar (sig,[]) id = fail $ "Cannot resolve symbol " ++ (show id)  
 lookupVar (sig,context) id = case Map.lookup id (head context) of
-        (Just a) -> case noDuplicateVar (sig,context) id of
-                True -> return a
-                False -> fail $ "Variable with name " ++ (show id) ++ " has already been taken!"
+        (Just a) -> return a
         otherwise -> lookupVar (sig, tail context) id
 
 noDuplicateVar :: Env -> Id -> Bool
-noDuplicateVar (_,[]) id = True
 noDuplicateVar (sig,context) id = case Map.lookup id (head context) of
         (Just a) -> False 
-        otherwise -> noDuplicateVar (sig,tail context) id
+        otherwise -> True
+
 
 noDuplicateFun :: Env -> Id -> Bool
 noDuplicateFun (sig,context) id = case Map.lookup id sig of
@@ -136,9 +154,10 @@ emptyEnv = (Map.empty,[])
 checkIncDec :: Env -> Id -> Err Type
 checkIncDec env id = do
         a <- lookupVar env id
-        case a == Type_int of
-                True -> return Type_int
-                False -> fail $ (show id) ++ " must be a Integer! Actual type: " ++ (show a)
+        case a of
+                Type_int -> return Type_int
+                Type_double -> return Type_double
+                otherwise -> fail $ (show id) ++ " must be a Integer or Double! Actual type: " ++ (show a)
 
 inferBin :: [Type] -> Env -> Exp -> Exp -> Err Type
 inferBin types env exp1 exp2 = do
@@ -210,8 +229,8 @@ inferExp env x = case x of
         EGt exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
         ELtEq exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
         EGtEq exp1 exp2 -> inferBinComp [Type_int,Type_double] env exp1 exp2
-        EEq exp1 exp2   -> inferBin [Type_int,Type_double,Type_bool] env exp1 exp2
-        ENEq exp1 exp2  -> inferBin [Type_int,Type_double,Type_bool] env exp1 exp2
+        EEq exp1 exp2   -> inferBinComp [Type_int,Type_double,Type_bool] env exp1 exp2
+        ENEq exp1 exp2  -> inferBinComp [Type_int,Type_double,Type_bool] env exp1 exp2
         EAnd exp1 exp2  -> inferBin [Type_bool] env exp1 exp2
         EOr  exp1 exp2  -> inferBin [Type_bool] env exp1 exp2
         EAss id exp     -> do
@@ -246,7 +265,8 @@ checkStm env val x = case x of
                 return env
         SIfElse exp stm1 stm2 -> do
                 checkExp env Type_bool exp
-                env'<- checkStms env val [stm1,stm2]
+                env1'<- checkStm (newBlock env) val stm1
+                env2'<- checkStm (newBlock env) val stm2
                 return env
         SReturn exp -> do
                 rexp <- inferExp env exp
