@@ -40,18 +40,34 @@ interpret (PDefs defs) = do
     -- Run the statements in the initial environment.
     () <$ runExceptT (evalStateT (runReaderT (evalStms ss) sig) emptyEnv)
 
+lookupVartail :: Id -> Eval Val
+lookupVartail id = do
+    env <- get
+    let env' = (tail env)
+    case Map.lookup id (head env') of
+        (Just a) -> return a
+        otherwise -> do
+            put (tail env)
+            val <- lookupVartail id
+            put env
+            return val 
+
 
 -- Assuming that the typechecker is OK 
 lookupVar :: Id -> Eval Val
 lookupVar id = do
-    (c:cs) <- get 
-    case Map.lookup id c of
-        (Just a) -> return a
-        otherwise -> do 
-            put cs
-            val <- lookupVar id
-            put (c:cs)
-            return val
+    (c:cs) <- get
+    if trace (show (c:cs)) False
+        then undefined
+        else
+            do
+        case Map.lookup id c of
+            (Just a) -> return a
+            otherwise -> do 
+                put cs
+                val <- lookupVar id
+                put (c:cs)
+                return val
 
 updateVar :: Id -> Val -> Eval ()
 updateVar id val = modify $ (\env -> update env id val)
@@ -64,15 +80,14 @@ updateVar id val = modify $ (\env -> update env id val)
 evalFun :: Id -> [Exp]-> Eval Val
 evalFun id exps = do
     newVar (Id "averyspecialname") VVoid
+    newBlock
     sig <- ask
     case Map.lookup id sig of
         (Just a) -> case a of
             (FunDef typ params stms) -> do
                 updateParams exps params
                 evalStms stms
-                case typ of
-                    Type_void -> return VVoid
-                    otherwise -> lookupVar (Id "averyspecialname")
+                lookupVar (Id "averyspecialname")
 
 
 readInt :: IO Integer
@@ -87,7 +102,7 @@ readDouble = do
 
 
 updateParams :: [Exp] -> [Id] -> Eval ()
-updateParams [] _ = return ()
+updateParams [] [] = return ()
 updateParams exps params = do
     val <- evalExp (head exps)
     newVar (head params) val
@@ -102,7 +117,6 @@ evalExp x = case x of
     EDouble d -> return $ VDouble d
     EId id -> lookupVar id
     EApp fun exps -> do
-        newBlock
         case fun of
             (Id "printInt") -> do
                 VInt i <- evalExp $ head exps
@@ -118,8 +132,7 @@ evalExp x = case x of
             (Id "readDouble") -> do
                 d <- liftIO $ readDouble
                 return (VDouble d)
-            _ ->  do
-                evalFun fun exps
+            otherwise -> evalFun fun exps
     EPostIncr id -> do
         val <- lookupVar id
         case val of
@@ -308,7 +321,7 @@ evalExp x = case x of
 
 evalStm :: Stm -> Eval ()
 evalStm s = case s of
-    SExp exp -> do 
+    SExp exp -> do
         evalExp exp
         return ()
     SDecls typ ids -> do
@@ -320,8 +333,9 @@ evalStm s = case s of
         e <- evalExp exp
         case e of
             (VBool True) -> do
-                newBlock 
+                newBlock
                 evalStm stm
+                popBlock
                 evalStm $ SWhile exp stm
             otherwise -> return ()
     SBlock stms -> do
@@ -333,9 +347,11 @@ evalStm s = case s of
             (VBool True) -> do
                 newBlock 
                 evalStm stm1
+                popBlock
             otherwise -> do
                 newBlock
                 evalStm stm2
+                popBlock
     SReturn exp -> do
         val <- evalExp exp
         updateVar (Id "averyspecialname") val
@@ -345,7 +361,7 @@ evalStm s = case s of
 evalStms :: [Stm] -> Eval ()
 evalStms [] = popBlock
 evalStms (s:stms) =  do
-    val <- lookupVar (Id "averyspecialname")
+    val <- lookupVartail (Id "averyspecialname")
     case val of
         VVoid -> do 
             evalStm s
@@ -353,10 +369,9 @@ evalStms (s:stms) =  do
         otherwise -> popBlock
 
 newVar :: Id -> Val -> Eval()
-newVar id val = modify $ (\env -> add env id val) 
-  where add :: Env -> Id -> Val -> Env
-        add [] id val = undefined
-        add (x:xs) id val = Map.insert id val x:xs
+newVar id val = do
+    (c:cs) <- get
+    put (Map.insert id val  c : cs)
 
 emptyEnv :: Env
 emptyEnv = [Map.singleton (Id "averyspecialname") VVoid]
