@@ -40,34 +40,17 @@ interpret (PDefs defs) = do
     -- Run the statements in the initial environment.
     () <$ runExceptT (evalStateT (runReaderT (evalStms ss) sig) emptyEnv)
 
-lookupVartail :: Id -> Eval Val
-lookupVartail id = do
-    env <- get
-    let env' = (tail env)
-    case Map.lookup id (head env') of
-        (Just a) -> return a
-        otherwise -> do
-            put (tail env)
-            val <- lookupVartail id
-            put env
-            return val 
-
-
 -- Assuming that the typechecker is OK 
 lookupVar :: Id -> Eval Val
 lookupVar id = do
-    (c:cs) <- get
-    if trace (show (c:cs)) False
-        then undefined
-        else
-            do
-        case Map.lookup id c of
-            (Just a) -> return a
-            otherwise -> do 
-                put cs
-                val <- lookupVar id
-                put (c:cs)
-                return val
+    c:cs <- get
+    case Map.lookup id c of
+        (Just a) -> return a
+        otherwise -> do 
+            put cs
+            val <- lookupVar id
+            put (c:cs)
+            return val
 
 updateVar :: Id -> Val -> Eval ()
 updateVar id val = modify $ (\env -> update env id val)
@@ -75,18 +58,18 @@ updateVar id val = modify $ (\env -> update env id val)
         update [] id val = undefined
         update (x:xs) id val = case Map.lookup id x of
             (Just a) -> (Map.update (return (Just val)) id x) : xs
-            otherwise -> update xs id val
+            otherwise -> x : update xs id val
 
 evalFun :: Id -> [Exp]-> Eval Val
 evalFun id exps = do
-    newVar (Id "averyspecialname") VVoid
-    newBlock
     sig <- ask
     case Map.lookup id sig of
         (Just a) -> case a of
             (FunDef typ params stms) -> do
                 updateParams exps params
+                --newVar (Id "averyspecialname") VVoid
                 evalStms stms
+                popBlock
                 lookupVar (Id "averyspecialname")
 
 
@@ -132,7 +115,9 @@ evalExp x = case x of
             (Id "readDouble") -> do
                 d <- liftIO $ readDouble
                 return (VDouble d)
-            otherwise -> evalFun fun exps
+            otherwise -> do
+                newBlock 
+                evalFun fun exps
     EPostIncr id -> do
         val <- lookupVar id
         case val of
@@ -300,12 +285,15 @@ evalExp x = case x of
                         return(VBool (not(b == b1)))
     EAnd exp1 exp2 -> do
         e1 <- evalExp exp1
-        e2 <- evalExp exp2
         case e1 of
             VBool b -> do
-                case e2 of
-                    VBool b1 -> do
-                        return (VBool (b && b1))
+                case b of
+                    False -> return (VBool False)
+                    True -> do
+                        e2 <- evalExp exp2
+                        case e2 of
+                            VBool b1 -> do
+                                return (VBool (b && b1))
     EOr exp1 exp2 -> do
         VBool b1 <- evalExp exp1
         case b1 of
@@ -320,53 +308,65 @@ evalExp x = case x of
 
 
 evalStm :: Stm -> Eval ()
-evalStm s = case s of
-    SExp exp -> do
-        evalExp exp
-        return ()
-    SDecls typ ids -> do
-        mapM_ (decls typ) ids
-    SInit typ id exp -> do
-        e <- evalExp exp
-        newVar id e
-    SWhile exp stm -> do
-        e <- evalExp exp
-        case e of
-            (VBool True) -> do
-                newBlock
-                evalStm stm
-                popBlock
-                evalStm $ SWhile exp stm
-            otherwise -> return ()
-    SBlock stms -> do
-        newBlock
-        evalStms stms
-    SIfElse exp stm1 stm2 -> do
-        e <- evalExp exp
-        case e of
-            (VBool True) -> do
-                newBlock 
-                evalStm stm1
-                popBlock
-            otherwise -> do
-                newBlock
-                evalStm stm2
-                popBlock
-    SReturn exp -> do
-        val <- evalExp exp
-        updateVar (Id "averyspecialname") val
+evalStm s = do
+    env <- get
+    --liftIO $ putStrLn (show env)
+    --liftIO $ putStrLn (show s) 
+    --liftIO $ putStrLn "\n"
+    case s of
+        SExp exp -> do
+            evalExp exp
+            return ()
+        SDecls typ ids -> do
+            mapM_ (decls typ) ids
+        SInit typ id exp -> do
+            e <- evalExp exp
+            newVar id e
+        SWhile exp stm -> do
+            e <- evalExp exp
+            newBlock
+            case e of
+                (VBool True) -> do
+                    evalStm stm
+                    popBlock
+                    evalStm $ SWhile exp stm
+                (VBool False) -> popBlock
+        SBlock stms -> do
+            newBlock
+            evalStms stms
+
+            --liftIO $ putStrLn "före:"
+            --env' <- get
+            --liftIO $ putStrLn (show env')
+
+            popBlock
+        SIfElse exp stm1 stm2 -> do
+            e <- evalExp exp
+            newBlock
+            case e of
+                (VBool True) -> do
+                    evalStm stm1
+                    popBlock
+                otherwise -> do
+                    evalStm stm2
+                    popBlock
+        SReturn exp -> do
+            val <- evalExp exp
+            updateVar (Id "averyspecialname") val
         
 
 
 evalStms :: [Stm] -> Eval ()
-evalStms [] = popBlock
+evalStms [] = return ()
 evalStms (s:stms) =  do
-    val <- lookupVartail (Id "averyspecialname")
-    case val of
-        VVoid -> do 
+    --val <- lookupVar (Id "averyspecialname")
+    case s of
+        SReturn exp -> do 
+             val <- evalExp exp
+             updateVar (Id "averyspecialname") val
+        otherwise -> do 
             evalStm s
             evalStms stms
-        otherwise -> popBlock
 
 newVar :: Id -> Val -> Eval()
 newVar id val = do

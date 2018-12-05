@@ -4,6 +4,7 @@ import Control.Monad
 
 import Data.Map (Map)
 import Data.Foldable
+import Debug.Trace
 import qualified Data.Map as Map
 
 import CPP.Abs
@@ -119,9 +120,14 @@ hasVoidasArg ([],_) = False
 hasVoidasArg(types,typ) | (head types) == Type_void = True
                         | otherwise = hasVoidasArg ((tail types),typ)
 
+newVar :: Env -> Id -> Type -> Err Env
+newVar (sig,context) id typ = case Map.lookup id (head context) of
+        (Just a) -> fail $ "Variable does already exists!"
+        otherwise -> return $ (sig,(Map.insert id typ (head context)) : (tail context))
+
 updateVar :: Env -> Id -> Type -> Err Env
 updateVar (sig,context) id typ = case updateHelp context id of
-        (False,_) -> return $ (sig,(Map.insert id typ (head context)) : (tail context))
+        (False,_) -> fail $ "TEST"
         (True, ctx) -> case noDuplicateVar (sig,context) id of
                 True -> return $ (sig, ctx)
                 False -> fail $ "Variable with name " ++ (show id) ++ " has already been taken!"
@@ -209,13 +215,13 @@ inferExp env x = case x of
         EInt i -> return Type_int
         EDouble d -> return Type_double
         EId id -> lookupVar env id
-        EApp id exp -> do
+        EApp id exps -> do
                 (args, ret) <- lookupFun env id
-                let inferredExps = map (inferExp env) exp
+                let inferredExps = map (inferExp env) exps
                 let okargs = map Ok args
                 case inferredExps == okargs of
                         True -> return ret
-                        False -> fail $ "The name of the method is right but the return type is wrong!"
+                        False -> fail $ "The name of the method is right but the argument(s) is wrong!"
 
         EPostIncr id -> checkIncDec env id
         EPostDecr id -> checkIncDec env id
@@ -247,14 +253,12 @@ checkStm env val x = case x of
                 inferExp env exp
                 return env
         SDecls typ ids -> case not (typ == Type_void) of
-                True -> do
-                        declcenv <- foldlM (\env_X id -> updateVar env_X id typ) env ids
-                        return declcenv
+                True -> foldlM (\env_X id -> newVar env_X id typ) env ids
                 False -> fail $ "Cant declare variable with type void!"
         SInit typ id exp -> do
                 declsexp <- inferExp env exp
                 case declsexp == typ of
-                        True -> updateVar env id typ
+                        True -> newVar env id typ
                         False -> fail $ "Variable with type " ++ (show typ) ++ " cannot be assigned to type " ++ (show declsexp)
         SWhile exp stm -> do
                 checkExp env Type_bool exp
