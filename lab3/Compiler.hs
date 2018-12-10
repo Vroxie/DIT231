@@ -100,10 +100,55 @@ compile name _prg = header
     , ";; END HEADER"
     ]
 
+isByte :: Integer -> Bool
+isByte i = (-128) <= i && i <= 127
 
-toJVM :: Fun -> [Char]
-toJVM fun = undefined
 
+class ToJVM a where
+  toJVM :: a -> [Char]
+
+
+instance ToJVM Fun where
+  toJVM fun = undefined
+
+
+instance ToJVM Label where
+  toJVM label = undefined
+
+instance ToJVM Code where
+  toJVM code = case code of
+    Store typ addr -> "istore " ++ (show addr)
+    Load typ addr -> "iload " ++ (show addr)
+    IConst i
+     | i >= 0 && i <= 5 -> "iconst_" ++ (show i)
+     | i == -1 -> "iconst_m1"
+     | isByte i -> "bipush " ++ (show i)
+     | otherwise -> "ldc " ++ (show i)
+    Pop typ -> "pop"
+    Return typ -> 
+      case typ of
+       Type_int -> "ireturn"
+       Type_void -> "return"
+    Add typ -> "iadd"
+    Sub typ -> "isub"
+    Mul typ -> "imul"
+    Div typ -> "idiv"
+    PostIncr typ addr -> "iload " ++ (show addr) ++ "iinc " ++ (show addr) ++ (show 1)
+    PreIncr typ addr-> "iinc " ++ (show addr) ++ (show 1) ++ "iload " ++ (show addr)
+    PostDecr typ addr -> "iload " ++ (show addr) ++ "iinc " ++ (show addr) ++ (show (-1))
+    PreDecr typ addr-> "iinc " ++ (show addr) ++ (show (-1)) ++ "iload " ++ (show addr)
+    And typ -> "iand"
+    Or typ -> "ior"
+    Label l -> toJVM l ++ ":"
+    Call fun -> "invokestatic " ++ toJVM fun
+    Goto l -> "goto " ++ toJVM l
+    IfZ l -> "ifeq " ++ toJVM l
+    IfLt typ l -> "if_icmplt " ++ toJVM l
+    IfGt typ l -> "if_icmpgt " ++ toJVM l
+    IfLtEq typ l -> "if_icmple " ++ toJVM l
+    IfGtEq typ l -> "if_icmpge " ++ toJVM l
+    IfEq typ l -> "if_icmpeq " ++ toJVM l
+    IfNEq typ l -> "if_icmpne " ++ toJVM l
 
 newVar :: Id -> Type -> Compile ()
 newVar id typ = undefined
@@ -118,7 +163,8 @@ inNewBlock = undefined
 
 lookupVar :: Id -> Compile (Addr,Type)
 lookupVar id = do
-  (St (c:cs) limitL stack limitS nLabel) <- get
+  (c:cs) <- gets cxt
+  stack <- gets limitStack
   case lookup id c of
     (Just a) -> case a of
       typ -> return $ (stack,typ)
@@ -261,7 +307,17 @@ data Code
   | IConst Integer   -- ^ Put integer constant on the stack.
   | Pop Type         -- ^ Pop something of type @Type@ from the stack.
   | Return Type      -- ^ Return from method of type @Type@.
+  
+  | PostIncr Type Addr
+  | PreIncr Type Addr
+  | PostDecr Type Addr
+  | PreDecr Type Addr
+
   | Add Type         -- ^ Add 2 top values of stack.
+  | Sub Type         -- ^ Substracts 2 top values of stack
+  | Mul Type         -- ^ Mulplicate 2 top values of stack
+  | Div Type         -- ^ Divide 2 top values of stack 
+
 
   | Call Fun         -- ^ Call function.
 
@@ -269,29 +325,38 @@ data Code
   | Goto Label       -- ^ Jump to label.
   | IfZ Label        -- ^ If top of stack is 0, jump to label.
   | IfLt Type Label  -- ^ If prev <  top, jump.
+  | IfGt Type Label
+  | IfLtEq Type Label
+  | IfGtEq Type Label
+  | IfEq Type Label
+  | IfNEq Type Label
+
+  | And Type
+  | Or Type
 
   deriving (Show)
 
 -- | Print a single instruction.  Also update stack limits
 emit :: Code -> Compile ()
-emit code = case code of
-  Store typ addr -> tell["istore " ++ (show addr)]
-  Load typ addr -> tell ["iload " ++ (show addr)]
-  IConst i -> tell["iconst_i " ++ (show i)]
-  Pop typ -> tell["pop"]
-  Return typ -> case typ of
-    Type_int -> tell["ireturn"]
-    Type_void -> tell["return"]
-  Add typ -> tell["iadd"]
-  Call fun -> case fun of
-    (Fun id (FunType ret params)) -> case ret of
-      Type_void -> tell["invokevirtual " ++ (show id)]
-      otherwise -> tell["invokestatic " ++ (show id)]
-  Label l -> undefined
-  Goto l -> tell["goto " ++ (show l)]
-  IfZ l -> tell["ifeq..le " ++ (show l)]
-  IfLt typ l -> tell["if_icmplt " ++ (show l)]
-
+emit code = do
+  tell[toJVM code] 
+  case code of
+    Store typ addr -> do 
+      limit <- gets limitStack
+      modify $ \ st -> st {limitStack = (limit-1)}
+    Load typ addr -> do
+      limit <- gets limitStack 
+      modify $ \ st -> st {limitStack = (limit+1)}
+    IConst i -> do
+      limit <- gets limitStack 
+      modify $ \ st -> st {limitStack = (limit+1)}
+    Pop typ -> do
+      limit <- gets limitStack
+      modify $ \ st -> st {limitStack = (limit-1)}
+    Return typ -> do
+      limit <- gets limitStack
+      current <- gets currentStack 
+      modify $ \ st -> st{limitStack = (limit-current)}
 
 
 -- * Labels
