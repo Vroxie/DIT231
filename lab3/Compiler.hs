@@ -133,10 +133,10 @@ instance ToJVM Code where
     Sub typ -> "isub"
     Mul typ -> "imul"
     Div typ -> "idiv"
-    PostIncr typ addr -> "iload " ++ (show addr) ++ "iinc " ++ (show addr) ++ (show 1)
-    PreIncr typ addr-> "iinc " ++ (show addr) ++ (show 1) ++ "iload " ++ (show addr)
-    PostDecr typ addr -> "iload " ++ (show addr) ++ "iinc " ++ (show addr) ++ (show (-1))
-    PreDecr typ addr-> "iinc " ++ (show addr) ++ (show (-1)) ++ "iload " ++ (show addr)
+    PostIncr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
+    PreIncr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
+    PostDecr typ addr byte ->"iinc " ++ (show addr) ++ (show byte)
+    PreDecr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
     And typ -> "iand"
     Or typ -> "ior"
     Label l -> toJVM l ++ ":"
@@ -256,9 +256,10 @@ compileExp e = do
   -- message for NYI
   let nyi = error $ "TODO: " ++ show e
   case e of
-
     EInt i -> do
       emit $ IConst i
+    ETrue -> emit $ IConst 1
+    EFalse -> emit $ IConst 0
 
     EId x -> do
       (a, t) <- lookupVar x
@@ -270,10 +271,45 @@ compileExp e = do
       let fun = fromMaybe (error "unbound function") $  Map.lookup f sig
       emit $ Call fun
 
+    EPostIncr id -> do
+      (addr,typ) <- lookupVar id
+      emit $ Load typ addr
+      emit $ PostIncr typ addr 1
+    
+    EPreIncr id -> do
+      (addr,typ) <- lookupVar id
+      emit $ PreIncr typ addr 1
+      emit $ Load typ addr
+    
+    EPostDecr id -> do
+      (addr,typ) <- lookupVar id
+      emit $ Load typ addr
+      emit $ PostDecr typ addr (-1)
+
+    EPreDecr id -> do
+      (addr,typ) <- lookupVar id
+      emit $ PreDecr typ addr (-1)
+      emit $ Load typ addr
+
     EPlus e1 e2 -> do
       compileExp e1
       compileExp e2
       emit $ Add Type_int
+
+    EMinus e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      emit $ Sub Type_int
+
+    ETimes e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      emit $ Mul Type_int
+    
+    EDiv e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      emit $ Div Type_int
 
     ELt    e1 e2 -> do
       compileExp e1
@@ -281,6 +317,66 @@ compileExp e = do
       yes  <- newLabel
       done <- newLabel
       emit $ IfLt Type_int yes
+      emit $ IConst 0
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 1
+      emit $ Label done
+
+    EGt e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ IfGt Type_int yes
+      emit $ IConst 0
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 1
+      emit $ Label done
+
+    ELtEq e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ IfLtEq Type_int yes
+      emit $ IConst 0
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 1
+      emit $ Label done
+
+    EGtEq e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ IfGtEq Type_int yes
+      emit $ IConst 0
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 1
+      emit $ Label done
+    
+    EEq e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ IfEq Type_int yes
+      emit $ IConst 0
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 1
+      emit $ Label done
+
+    ENEq e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ IfNEq Type_int yes
       emit $ IConst 0
       emit $ Goto done
       emit $ Label yes
@@ -308,10 +404,10 @@ data Code
   | Pop Type         -- ^ Pop something of type @Type@ from the stack.
   | Return Type      -- ^ Return from method of type @Type@.
   
-  | PostIncr Type Addr
-  | PreIncr Type Addr
-  | PostDecr Type Addr
-  | PreDecr Type Addr
+  | PostIncr Type Addr Integer
+  | PreIncr Type Addr Integer
+  | PostDecr Type Addr Integer
+  | PreDecr Type Addr Integer
 
   | Add Type         -- ^ Add 2 top values of stack.
   | Sub Type         -- ^ Substracts 2 top values of stack
@@ -357,6 +453,7 @@ emit code = do
       limit <- gets limitStack
       current <- gets currentStack 
       modify $ \ st -> st{limitStack = (limit-current)}
+    otherwise -> return ()
 
 
 -- * Labels
