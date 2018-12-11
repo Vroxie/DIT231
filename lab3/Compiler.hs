@@ -103,17 +103,28 @@ compile name _prg = header
 isByte :: Integer -> Bool
 isByte i = (-128) <= i && i <= 127
 
+typeToString :: Type -> String
+typeToString typ = case typ of
+  Type_int -> "I"
+  Type_void -> "V"
+  Type_bool -> "Z" 
+
+
+typelistToString :: [Type] -> String
+typelistToString [] = []
+typelistToString (Type_int:ts) = "I" ++ typelistToString ts
+typelistToString (Type_bool:ts) = "Z" ++ typelistToString ts
 
 class ToJVM a where
   toJVM :: a -> [Char]
 
 
 instance ToJVM Fun where
-  toJVM fun = undefined
+  toJVM (Fun f (FunType ret params)) = (show f) ++ "(" ++ typelistToString params ++ ")" ++ (typeToString ret)  
 
 
 instance ToJVM Label where
-  toJVM label = undefined
+  toJVM (L i) = "L" ++ (show i)
 
 instance ToJVM Code where
   toJVM code = case code of
