@@ -137,8 +137,8 @@ instance ToJVM Code where
     PreIncr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
     PostDecr typ addr byte ->"iinc " ++ (show addr) ++ (show byte)
     PreDecr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
-    And typ -> "iand"
-    Or typ -> "ior"
+    And typ  -> "iand"
+    Or typ  -> "ior"
     Label l -> toJVM l ++ ":"
     Call fun -> "invokestatic " ++ toJVM fun
     Goto l -> "goto " ++ toJVM l
@@ -247,6 +247,19 @@ compileStm s = do
       inNewBlock $ compileStm s1
       emit $ Goto start
       emit $ Label done
+
+    SIfElse exp stm1 stm2 -> do
+      yes <- newLabel
+      done <- newLabel
+      compileExp exp
+      emit $ IfZ yes
+      inNewBlock $ compileStm stm1
+      emit $ Goto done
+      emit $ Label yes
+      inNewBlock $ compileStm stm2
+      emit $ Label done
+
+
 
     _ -> nyi
 
@@ -383,6 +396,34 @@ compileExp e = do
       emit $ IConst 1
       emit $ Label done
 
+    EAnd e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ And Type_int
+      emit $ IfZ yes
+      emit $ IConst 1
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 0
+      emit $ Label done
+    EOr e1 e2 -> do
+      compileExp e1
+      compileExp e2
+      yes <- newLabel
+      done <- newLabel
+      emit $ Or Type_int
+      emit $ IfZ yes
+      emit $ IConst 1
+      emit $ Goto done
+      emit $ Label yes
+      emit $ IConst 0
+      emit $ Label done
+  
+    
+
+
     EAss x e1 -> do
       compileExp e1
       (a, t) <- lookupVar x
@@ -438,21 +479,26 @@ emit code = do
   tell[toJVM code] 
   case code of
     Store typ addr -> do 
-      limit <- gets limitStack
-      modify $ \ st -> st {limitStack = (limit-1)}
+      stack <- gets currentStack
+      modify $ \ st -> st {currentStack = (stack-1)}
     Load typ addr -> do
-      limit <- gets limitStack 
-      modify $ \ st -> st {limitStack = (limit+1)}
+      limit <- gets limitStack
+      stack <- gets currentStack
+      case limit == stack of
+        True -> modify $ \ st -> st {limitStack = (limit+1)}  
+      modify $ \ st -> st {currentStack = (stack+1)}
     IConst i -> do
-      limit <- gets limitStack 
-      modify $ \ st -> st {limitStack = (limit+1)}
+      stack <- gets currentStack
+      limit <- gets limitStack
+      case limit == stack of
+        True -> modify $ \ st -> st {limitStack = (limit+1)}
+      modify $ \ st -> st {currentStack = (stack+1)}
     Pop typ -> do
-      limit <- gets limitStack
-      modify $ \ st -> st {limitStack = (limit-1)}
+      stack <- gets currentStack
+      modify $ \ st -> st {currentStack = (stack-1)}
     Return typ -> do
-      limit <- gets limitStack
       current <- gets currentStack 
-      modify $ \ st -> st{limitStack = (limit-current)}
+      modify $ \ st -> st{currentStack = (current-1)}
     otherwise -> return ()
 
 
