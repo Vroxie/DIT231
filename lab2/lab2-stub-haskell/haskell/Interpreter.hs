@@ -24,9 +24,6 @@ type Context = Map Id Val
 
 data FunDef = FunDef { typ :: Type,funParams :: [Id], funBody :: [Stm] }
 
-data Execute = Go
-             | Stop
-
 data Val = VInt Integer
          | VDouble Double
          | VBool Bool
@@ -70,10 +67,11 @@ evalFun id exps = do
         (Just a) -> case a of
             (FunDef typ params stms) -> do
                 updateParams exps params
-                val <- lookupVar (Id "averyspecialname")
                 evalStms stms
+                val' <- lookupVar (Id "averyspecialname")
                 popBlock
-                lookupVar (Id "averyspecialname")
+                updateVar (Id "averyspecialname") VVoid
+                return val'
 
 readInt :: IO Integer
 readInt = do
@@ -87,11 +85,15 @@ readDouble = do
 
 
 updateParams :: [Exp] -> [Id] -> Eval ()
-updateParams [] [] = return ()
-updateParams exps params = do
-    val <- evalExp (head exps)
-    newVar (head params) val
-    updateParams (tail exps) (tail params)
+updateParams [] _ = return ()
+updateParams (e:exps) (p:params) = do
+    (c:cs) <- get
+    put cs
+    val <- evalExp e
+    newContexts <- get
+    put (c:newContexts)
+    newVar p val
+    updateParams exps params
 
 
 evalExp :: Exp -> Eval Val
@@ -309,23 +311,17 @@ evalExp x = case x of
         lookupVar id
 
 
-evalStm :: Stm -> Eval Execute
+evalStm :: Stm -> Eval ()
 evalStm s = do
-    env <- get
-    --liftIO $ putStrLn (show env)
-    --liftIO $ putStrLn (show s) 
-    --liftIO $ putStrLn "\n"
     case s of
         SExp exp -> do
             evalExp exp
-            return Go
+            return ()
         SDecls typ ids -> do
             mapM_ (decls typ) ids
-            return Go
         SInit typ id exp -> do
             e <- evalExp exp
             newVar id e
-            return Go
         SWhile exp stm -> do
             e <- evalExp exp
             newBlock
@@ -334,20 +330,12 @@ evalStm s = do
                     evalStm stm
                     popBlock
                     evalStm $ SWhile exp stm
-                    return Go
                 (VBool False) -> do 
                     popBlock
-                    return Go
         SBlock stms -> do
             newBlock
             evalStms stms
-
-            --liftIO $ putStrLn "före:"
-            --env' <- get
-            --liftIO $ putStrLn (show env')
-
             popBlock
-            return Go
         SIfElse exp stm1 stm2 -> do
             e <- evalExp exp
             newBlock
@@ -355,30 +343,24 @@ evalStm s = do
                 (VBool True) -> do
                     evalStm stm1
                     popBlock
-                    return Go
                 otherwise -> do
                     evalStm stm2
                     popBlock
-                    return Go
         SReturn exp -> do
             val <- evalExp exp
             updateVar (Id "averyspecialname") val
-            return Stop
         
 
 
-evalStms :: [Stm] -> Eval Execute
-evalStms [] = return Go
+evalStms :: [Stm] -> Eval ()
+evalStms [] = return ()
 evalStms (s:stms) =  do
-    --val <- lookupVar (Id "averyspecialname")
-    case s of
-        SReturn exp -> do 
-             val <- evalExp exp
-             updateVar (Id "averyspecialname") val
-             return Stop
-        otherwise -> do 
+    val <- lookupVar (Id "averyspecialname")
+    case val of
+        VVoid -> do 
             evalStm s
             evalStms stms
+        otherwise -> return () 
 
 newVar :: Id -> Val -> Eval()
 newVar id val = do
