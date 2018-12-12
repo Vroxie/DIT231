@@ -39,7 +39,7 @@ data Fun = Fun { funId :: Id, funFunType :: FunType }
   deriving Show
 
 type Cxt = [Block]
-type Block = [(Id, Type)]
+type Block = [(Id, Int)]
 
 newtype Label = L { theLabel :: Int }
   deriving (Eq, Enum, Show)
@@ -64,15 +64,22 @@ builtin =
   ]
 
 -- | Entry point.
-
 compile
   :: String  -- ^ Class name.
   -> Program -- ^ Type-annotated program.
   -> String  -- ^ Generated jasmin source file content.
-compile name _prg = header
+compile name prg@(PDefs defs) = unlines w
   where
-  header :: String
-  header = unlines
+  sigEntry def@(DFun _ f@(Id x) _ _ ) = (f, Fun (Id $ name ++ "/" ++ x) $ funType def)
+  sig = Map.fromList $ builtin ++ map sigEntry defs
+  w   = snd $ evalRWS (compileProgram name prg) sig initSt
+
+compileProgram :: String -> Program -> Compile ()
+compileProgram name (PDefs defs) = do
+  tell header
+  mapM_ compileFun defs
+  where
+  header =
     [ ";; BEGIN HEADER"
     , ""
     , ".class public " ++ name
@@ -100,6 +107,7 @@ compile name _prg = header
     , ";; END HEADER"
     ]
 
+
 isByte :: Integer -> Bool
 isByte i = (-128) <= i && i <= 127
 
@@ -120,7 +128,7 @@ class ToJVM a where
 
 
 instance ToJVM Fun where
-  toJVM (Fun f (FunType ret params)) = (show f) ++ "(" ++ typelistToString params ++ ")" ++ (typeToString ret)  
+  toJVM (Fun (Id name) (FunType ret params)) = name ++ "(" ++ typelistToString params ++ ")" ++ (typeToString ret)  
 
 
 instance ToJVM Label where
@@ -161,31 +169,35 @@ instance ToJVM Code where
     IfEq typ l -> "if_icmpeq " ++ toJVM l
     IfNEq typ l -> "if_icmpne " ++ toJVM l
 
-newVar :: Id -> Type -> Compile ()
-newVar id typ = undefined
-  --(St (c:cs) limitL stack limitS nLabel) <- get
-  --(id,typ) : c 
+newVar :: Id -> Compile ()
+newVar id  = do
+  c:cs <- gets cxt
+  current <- gets limitLocals
+  modify $ \st -> st {cxt = ((id,current) : c):cs }
+  modify $ \st -> st {limitLocals = (limitLocals st) + 1}
+  emit $ Store Type_int current
 
 blank :: Compile ()
-blank = undefined
+blank = tell[""]
 
 inNewBlock :: Compile() -> Compile ()
-inNewBlock = undefined
+inNewBlock x = do
+  cs <- gets cxt
+  modify $ \st -> st {cxt = []:cs }
 
 lookupVar :: Id -> Compile (Addr,Type)
 lookupVar id = do
   (c:cs) <- gets cxt
-  stack <- gets limitStack
   case lookup id c of
     (Just a) -> case a of
-      typ -> return $ (stack,typ)
-    otherwise -> lookupVarhelp cs id (stack-1)
+      i -> return $ (i,Type_int)
+    otherwise -> lookupVarhelp cs id
 
-lookupVarhelp :: Cxt -> Id -> Int -> Compile (Addr,Type)
-lookupVarhelp (c:cs) id stack = case lookup id c of
+lookupVarhelp :: Cxt -> Id -> Compile (Addr,Type)
+lookupVarhelp (c:cs) id = case lookup id c of
   (Just a) -> case a of
-    typ -> return $ (stack,typ) 
-  otherwise -> lookupVarhelp cs id (stack-1)
+    i -> return $ (i,Type_int) 
+  otherwise -> lookupVarhelp cs id
 
 
 compileFun :: Def -> Compile ()
@@ -196,7 +208,7 @@ compileFun def@(DFun t f args ss) = do
       -- prepare environment
     lab <- gets nextLabel
     put initSt{ nextLabel = lab }
-    mapM_ (\ (ADecl t' x) -> newVar x t') args
+    mapM_ (\ (ADecl t' x) -> newVar x) args
     
       -- compile statements
     w <- grabOutput $ do
@@ -234,7 +246,7 @@ compileStm s = do
 
     SInit t x e -> do
       compileExp e
-      newVar x t
+      newVar x
       (a, _) <- lookupVar x
       emit $ Store t a
 
@@ -270,9 +282,9 @@ compileStm s = do
       inNewBlock $ compileStm stm2
       emit $ Label done
 
+    SDecls t ids -> do
+      mapM_ newVar ids
 
-
-    _ -> nyi
 
 
 compileExp :: Exp -> Compile ()
@@ -490,27 +502,36 @@ emit code = do
   tell[toJVM code] 
   case code of
     Store typ addr -> do 
-      stack <- gets currentStack
-      modify $ \ st -> st {currentStack = (stack-1)}
+      decStack
     Load typ addr -> do
       limit <- gets limitStack
       stack <- gets currentStack
       case limit == stack of
-        True -> modify $ \ st -> st {limitStack = (limit+1)}  
-      modify $ \ st -> st {currentStack = (stack+1)}
+        True ->  do
+          modify $ \ st -> st {limitStack = (limit+1)}
+          incStack
+        False -> incStack  
     IConst i -> do
       stack <- gets currentStack
       limit <- gets limitStack
       case limit == stack of
-        True -> modify $ \ st -> st {limitStack = (limit+1)}
-      modify $ \ st -> st {currentStack = (stack+1)}
+        True -> do 
+          modify $ \ st -> st {limitStack = (limit+1)}
+          incStack
+        False -> incStack
     Pop typ -> do
-      stack <- gets currentStack
-      modify $ \ st -> st {currentStack = (stack-1)}
+      decStack
     Return typ -> do
-      current <- gets currentStack 
-      modify $ \ st -> st{currentStack = (current-1)}
+      decStack
     otherwise -> return ()
+
+
+incStack :: Compile ()
+incStack = modify $ \ st -> st {currentStack = (currentStack st) +1}
+
+decStack :: Compile ()
+decStack = do
+  modify $ \st -> st {currentStack = (currentStack st) -1}
 
 
 -- * Labels
