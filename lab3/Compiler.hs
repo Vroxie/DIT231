@@ -60,7 +60,8 @@ type Compile = RWS Sig Output St
 
 builtin :: [(Id, Fun)]
 builtin =
-  [ (Id "printInt"   , Fun (Id "Runtime/printInt"   ) $ FunType Type_void [Type_int])
+  [ (Id "printInt"   , Fun (Id "Runtime/printInt"   ) $ FunType Type_void [Type_int]),
+    (Id "readInt"   , Fun (Id "Runtime/readInt"   ) $ FunType Type_int [])
   ]
 
 -- | Entry point.
@@ -87,6 +88,7 @@ compileProgram name (PDefs defs) = do
     , ""
     , ".method public <init>()V"
     , "  .limit locals 1"
+    , "  .limit stack 1"
     , ""
     , "  aload_0"
     , "  invokespecial java/lang/Object/<init>()V"
@@ -136,8 +138,12 @@ instance ToJVM Label where
 
 instance ToJVM Code where
   toJVM code = case code of
-    Store typ addr -> "istore " ++ (show addr)
-    Load typ addr -> "iload " ++ (show addr)
+    Store typ addr 
+     | addr >= 0 && addr <= 3 -> "istore_" ++ (show addr)
+     | otherwise -> "istore " ++ (show addr)
+    Load typ addr
+     | addr >= 0 && addr <= 3 -> "iload_" ++ (show addr)
+     | otherwise -> "iload " ++ (show addr)
     IConst i
      | i >= 0 && i <= 5 -> "iconst_" ++ (show i)
      | i == -1 -> "iconst_m1"
@@ -175,7 +181,6 @@ newVar id  = do
   current <- gets limitLocals
   modify $ \st -> st {cxt = ((id,current) : c):cs }
   modify $ \st -> st {limitLocals = (limitLocals st) + 1}
-  emit $ Store Type_int current
 
 blank :: Compile ()
 blank = tell[""]
@@ -185,6 +190,10 @@ inNewBlock x = do
   cs <- gets cxt
   modify $ \st -> st {cxt = []:cs }
 
+popBlock :: Compile ()
+popBlock = do
+  (c:cs) <- gets cxt
+  modify $ \st -> st {cxt = cs}
 lookupVar :: Id -> Compile (Addr,Type)
 lookupVar id = do
   (c:cs) <- gets cxt
@@ -241,7 +250,6 @@ compileStm s = do
 
   -- message for NYI
   let nyi = error $ "TODO: " ++ top
-
   case s of
 
     SInit t x e -> do
@@ -260,6 +268,7 @@ compileStm s = do
 
     SBlock ss -> do
       inNewBlock $ mapM_ compileStm ss
+      popBlock
 
     SWhile e s1 -> do
       start <- newLabel
@@ -268,6 +277,7 @@ compileStm s = do
       compileExp e
       emit $ IfZ done
       inNewBlock $ compileStm s1
+      popBlock
       emit $ Goto start
       emit $ Label done
 
@@ -277,9 +287,11 @@ compileStm s = do
       compileExp exp
       emit $ IfZ yes
       inNewBlock $ compileStm stm1
+      popBlock
       emit $ Goto done
       emit $ Label yes
       inNewBlock $ compileStm stm2
+      popBlock
       emit $ Label done
 
     SDecls t ids -> do
@@ -519,8 +531,10 @@ emit code = do
           modify $ \ st -> st {limitStack = (limit+1)}
           incStack
         False -> incStack
-    Pop typ -> do
-      decStack
+    Call fun -> decStack
+    Pop typ -> case typ of
+      Type_void -> return ()
+      otherwise -> decStack
     Return typ -> do
       decStack
     otherwise -> return ()
