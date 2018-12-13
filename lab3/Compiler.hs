@@ -158,10 +158,10 @@ instance ToJVM Code where
     Sub typ -> "isub"
     Mul typ -> "imul"
     Div typ -> "idiv"
-    PostIncr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
-    PreIncr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
-    PostDecr typ addr byte ->"iinc " ++ (show addr) ++ (show byte)
-    PreDecr typ addr byte -> "iinc " ++ (show addr) ++ (show byte)
+    PostIncr typ addr byte -> "iinc " ++ (show addr) ++ " " ++ (show byte)
+    PreIncr typ addr byte -> "iinc " ++ (show addr) ++ " " ++ (show byte)
+    PostDecr typ addr byte ->"iinc " ++ (show addr) ++ " " ++ (show byte)
+    PreDecr typ addr byte -> "iinc " ++ (show addr) ++ " " ++ (show byte)
     And typ  -> "iand"
     Or typ  -> "ior"
     Label l -> toJVM l ++ ":"
@@ -184,6 +184,13 @@ newVar id  = do
 
 blank :: Compile ()
 blank = tell[""]
+
+getTypeExp :: Exp -> Compile Type
+getTypeExp (EApp f exps) = do
+  sig <- ask
+  let (Fun id (FunType typ params)) = fromMaybe (error "unbound function") $  Map.lookup f sig
+  return typ
+
 
 inNewBlock :: Compile() -> Compile ()
 inNewBlock x = do
@@ -260,7 +267,12 @@ compileStm s = do
 
     SExp  e -> do
       compileExp e
-      emit $ Pop Type_int
+      case e of
+        (EApp f exps) -> do
+          typ <- getTypeExp e
+          emit $ Pop typ
+        otherwise -> emit $ Pop Type_int
+      
 
     SReturn  e -> do
       compileExp e
@@ -535,8 +547,6 @@ emit code = do
     Pop typ -> case typ of
       Type_void -> return ()
       otherwise -> decStack
-    Return typ -> do
-      decStack
     otherwise -> return ()
 
 
@@ -545,7 +555,10 @@ incStack = modify $ \ st -> st {currentStack = (currentStack st) +1}
 
 decStack :: Compile ()
 decStack = do
-  modify $ \st -> st {currentStack = (currentStack st) -1}
+  limit <- gets currentStack
+  case limit < 1 of
+    True -> return ()
+    False -> modify $ \st -> st {currentStack = (currentStack st) -1}
 
 
 -- * Labels
