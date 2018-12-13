@@ -113,6 +113,7 @@ compileProgram name (PDefs defs) = do
 isByte :: Integer -> Bool
 isByte i = (-128) <= i && i <= 127
 
+
 typeToString :: Type -> String
 typeToString typ = case typ of
   Type_int -> "I"
@@ -150,6 +151,7 @@ instance ToJVM Code where
      | isByte i -> "bipush " ++ (show i)
      | otherwise -> "ldc " ++ (show i)
     Pop typ -> "pop"
+    Nop typ -> "nop"
     Return typ -> 
       case typ of
        Type_int -> "ireturn"
@@ -190,10 +192,10 @@ getTypeExp (EApp f exps) = do
   sig <- ask
   let (Fun id (FunType typ params)) = fromMaybe (error "unbound function") $  Map.lookup f sig
   return typ
+getTypeExp _ = return Type_int
 
-
-inNewBlock :: Compile() -> Compile ()
-inNewBlock x = do
+inNewBlock :: Compile ()
+inNewBlock = do
   cs <- gets cxt
   modify $ \st -> st {cxt = []:cs }
 
@@ -267,11 +269,8 @@ compileStm s = do
 
     SExp  e -> do
       compileExp e
-      case e of
-        (EApp f exps) -> do
-          typ <- getTypeExp e
-          emit $ Pop typ
-        otherwise -> emit $ Pop Type_int
+      typ <- getTypeExp e
+      emit $ Pop typ
       
 
     SReturn  e -> do
@@ -279,7 +278,8 @@ compileStm s = do
       emit $ Return Type_int
 
     SBlock ss -> do
-      inNewBlock $ mapM_ compileStm ss
+      inNewBlock
+      mapM_ compileStm ss
       popBlock
 
     SWhile e s1 -> do
@@ -288,9 +288,10 @@ compileStm s = do
       emit $ Label start
       compileExp e
       emit $ IfZ done
-      inNewBlock $ compileStm s1
-      popBlock
+      inNewBlock
+      compileStm s1
       emit $ Goto start
+      popBlock
       emit $ Label done
 
     SIfElse exp stm1 stm2 -> do
@@ -298,11 +299,13 @@ compileStm s = do
       done <- newLabel
       compileExp exp
       emit $ IfZ yes
-      inNewBlock $ compileStm stm1
+      inNewBlock
+      compileStm stm1
       popBlock
       emit $ Goto done
       emit $ Label yes
-      inNewBlock $ compileStm stm2
+      inNewBlock
+      compileStm stm2
       popBlock
       emit $ Label done
 
@@ -490,6 +493,7 @@ data Code
 
   | IConst Integer   -- ^ Put integer constant on the stack.
   | Pop Type         -- ^ Pop something of type @Type@ from the stack.
+  | Nop Type
   | Return Type      -- ^ Return from method of type @Type@.
   
   | PostIncr Type Addr Integer
@@ -522,6 +526,7 @@ data Code
 
 -- | Print a single instruction.  Also update stack limits
 emit :: Code -> Compile ()
+emit (Pop Type_void) = return ()
 emit code = do
   tell[toJVM code] 
   case code of
@@ -544,9 +549,7 @@ emit code = do
           incStack
         False -> incStack
     Call fun -> decStack
-    Pop typ -> case typ of
-      Type_void -> return ()
-      otherwise -> decStack
+    Pop typ -> decStack
     otherwise -> return ()
 
 
