@@ -526,7 +526,7 @@ data Code
 
 -- | Print a single instruction.  Also update stack limits
 emit :: Code -> Compile ()
-emit (Pop Type_void) = return ()
+emit (Pop Type_void) = tell["nop"]
 emit code = do
   tell[toJVM code] 
   case code of
