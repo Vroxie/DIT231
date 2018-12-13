@@ -49,7 +49,7 @@ initSt = St
   { cxt = [[]]
   , limitLocals   = 0
   , currentStack  = 0
-  , limitStack    = 0
+  , limitStack    = 1
   , nextLabel     = L 0
   }
   
@@ -241,9 +241,10 @@ compileFun def@(DFun t f args ss) = do
     
       -- output code, indented by 2
     tell $ map (\ s -> if null s then s else "  " ++ s) w
+
     
       -- function footer
-    tell [ "", ".end method"]
+    tell ["return", "", ".end method"]
 
 
 compileStm :: Stm -> Compile ()
@@ -447,31 +448,39 @@ compileExp e = do
       emit $ Label done
 
     EAnd e1 e2 -> do
-      compileExp e1
-      compileExp e2
-      yes <- newLabel
       done <- newLabel
-      emit $ And Type_int
-      emit $ IfZ yes
+      false <- newLabel
+      compileExp e1
+      emit $ IfZ false
+      compileExp e2
+      emit $ IfZ false
+
       emit $ IConst 1
       emit $ Goto done
-      emit $ Label yes
+
+      emit $ Label false
       emit $ IConst 0
+
       emit $ Label done
+
     EOr e1 e2 -> do
-      compileExp e1
-      compileExp e2
-      yes <- newLabel
+      checkSec <- newLabel
+      false <- newLabel
       done <- newLabel
-      emit $ Or Type_int
-      emit $ IfZ yes
+      compileExp e1
+      emit $ IfZ checkSec
       emit $ IConst 1
       emit $ Goto done
-      emit $ Label yes
+      emit $ Label checkSec
+      compileExp e2
+      emit $ IfZ false
+      emit $ IConst 1
+      emit $ Goto done
+
+      emit $ Label false
       emit $ IConst 0
+      
       emit $ Label done
-  
-    
 
 
     EAss x e1 -> do
@@ -530,31 +539,27 @@ emit (Pop Type_void) = tell["nop"]
 emit code = do
   tell[toJVM code] 
   case code of
-    Store typ addr -> do 
-      decStack
-    Load typ addr -> do
-      limit <- gets limitStack
-      stack <- gets currentStack
-      case limit == stack of
-        True ->  do
-          modify $ \ st -> st {limitStack = (limit+1)}
-          incStack
-        False -> incStack  
-    IConst i -> do
-      stack <- gets currentStack
-      limit <- gets limitStack
-      case limit == stack of
-        True -> do 
-          modify $ \ st -> st {limitStack = (limit+1)}
-          incStack
-        False -> incStack
-    Call fun -> decStack
+    Store typ addr -> decStack
+    Load typ addr -> incStack  
+    IConst i -> incStack
+    Call fun -> incStack
     Pop typ -> decStack
+    Add typ -> decStack
+    Sub typ -> decStack
+    Div typ -> decStack
+    Mul typ -> decStack
     otherwise -> return ()
 
 
 incStack :: Compile ()
-incStack = modify $ \ st -> st {currentStack = (currentStack st) +1}
+incStack = do
+  limit <- gets limitStack
+  current <- gets currentStack
+  case limit == current of
+    True -> do
+      modify $ \ st -> st {limitStack = (limit+1)}
+      modify $ \ st -> st {currentStack = (current+1)}
+    otherwise -> modify $ \ st -> st {currentStack = (current+1)}
 
 decStack :: Compile ()
 decStack = do
