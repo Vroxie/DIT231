@@ -18,9 +18,10 @@ separator Arg "," ;
 TypeDef.    DefStm  ::= "typedef" Type Id;
 InitDef.    DefStm  ::= Type [Var];
 InitQDef.   DefStm  ::= Qual Id "=" Exp;
+InitQDef2.  DefStm  ::= Type Qual "=" Exp;
 
 VarQual.    Var ::= Qual;
-VarAssign.  Var ::= Qual "=" Exp;
+VarAssign.  Var ::= Id "=" Exp;
 
 
 separator nonempty Var ",";
@@ -99,7 +100,7 @@ QI.       Qual ::= Id;
 ConstTypeVar. Type  ::= "const" SubType;
 ConstType.    Type  ::= SubType;
 
-Refen.        Ref   ::= "&";
+Pointer.   Ref   ::= "&";
 separator nonempty Ref " ";
 
 token Id (letter (letter | digit | '_')*);

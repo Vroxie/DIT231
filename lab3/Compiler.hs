@@ -17,7 +17,6 @@ import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 
---import Annotated
 
 import CPP.Abs
 import CPP.Print (printTree)
@@ -25,11 +24,11 @@ import TypeChecker (FunType(..))
 
 
 data St = St
-  { cxt           :: Cxt   -- ^ Context.
-  , limitLocals   :: Int   -- ^ Maximal size for locals encountered.
-  , currentStack  :: Int   -- ^ Current stack size.
-  , limitStack    :: Int   -- ^ Maximal stack size encountered.
-  , nextLabel     :: Label -- ^ Next jump label (persistent part of state)
+  { cxt           :: Cxt   --  Context.
+  , limitLocals   :: Int   --  Maximal size for locals encountered.
+  , currentStack  :: Int   --  Current stack size.
+  , limitStack    :: Int   --  Maximal stack size encountered.
+  , nextLabel     :: Label --  Next jump label (persistent part of state)
   }
 
 type Sig = Map Id Fun
@@ -109,11 +108,11 @@ compileProgram name (PDefs defs) = do
     , ";; END HEADER"
     ]
 
-
+-- Checking if the given integer is a byte
 isByte :: Integer -> Bool
 isByte i = (-128) <= i && i <= 127
 
-
+-- Convert a functions' return type to a String so that JVM can interpret
 typeToString :: Type -> String
 typeToString typ = case typ of
   Type_int -> "I"
@@ -121,11 +120,14 @@ typeToString typ = case typ of
   Type_bool -> "Z" 
 
 
+--Converts a functions' arguments' types to a String so that JVM can interpret
 typelistToString :: [Type] -> String
 typelistToString [] = []
 typelistToString (Type_int:ts) = "I" ++ typelistToString ts
 typelistToString (Type_bool:ts) = "Z" ++ typelistToString ts
 
+
+--Typeclass for the function ToJVM in order to have every print of code is in one function
 class ToJVM a where
   toJVM :: a -> [Char]
 
@@ -151,7 +153,6 @@ instance ToJVM Code where
      | isByte i -> "bipush " ++ (show i)
      | otherwise -> "ldc " ++ (show i)
     Pop typ -> "pop"
-    Nop typ -> "nop"
     Return typ -> 
       case typ of
        Type_int -> "ireturn"
@@ -177,6 +178,8 @@ instance ToJVM Code where
     IfEq typ l -> "if_icmpeq " ++ toJVM l
     IfNEq typ l -> "if_icmpne " ++ toJVM l
 
+
+--Creating a new variable and puts in the memory, the address for the variable is currentStack
 newVar :: Id -> Compile ()
 newVar id  = do
   c:cs <- gets cxt
@@ -187,6 +190,7 @@ newVar id  = do
 blank :: Compile ()
 blank = tell[""]
 
+--Function to collect the type for an expression
 getTypeExp :: Exp -> Compile Type
 getTypeExp (EApp f exps) = do
   sig <- ask
@@ -194,15 +198,19 @@ getTypeExp (EApp f exps) = do
   return typ
 getTypeExp _ = return Type_int
 
+--creating a new block
 inNewBlock :: Compile ()
 inNewBlock = do
   cs <- gets cxt
   modify $ \st -> st {cxt = []:cs }
 
+--removing a block
 popBlock :: Compile ()
 popBlock = do
   (c:cs) <- gets cxt
   modify $ \st -> st {cxt = cs}
+
+--Searching for a variable in our memory, returns the adress of the variable
 lookupVar :: Id -> Compile (Addr,Type)
 lookupVar id = do
   (c:cs) <- gets cxt
@@ -551,6 +559,7 @@ emit code = do
     otherwise -> return ()
 
 
+-- Incrementing the size of the stack  
 incStack :: Compile ()
 incStack = do
   limit <- gets limitStack
@@ -561,6 +570,8 @@ incStack = do
       modify $ \ st -> st {currentStack = (current+1)}
     otherwise -> modify $ \ st -> st {currentStack = (current+1)}
 
+
+-- Decrementing thesize of the stack
 decStack :: Compile ()
 decStack = do
   limit <- gets currentStack

@@ -24,7 +24,6 @@ typecheck (PDefs defs) = do
                 foldlM (\env_X def -> checkDefArgs env_X def ) env defs
                 mapM_ (checkDef env) defs
 
-                --return ()
 
 createSig :: [Def] -> Sig
 createSig defs = Map.fromList (map defToSig defs)
@@ -99,17 +98,6 @@ lookupVar (sig,context) id = case Map.lookup id (head context) of
         (Just a) -> return a
         otherwise -> lookupVar (sig, tail context) id
 
-noDuplicateVar :: Env -> Id -> Bool
-noDuplicateVar (sig,context) id = case Map.lookup id (head context) of
-        (Just a) -> False 
-        otherwise -> True
-
-
-noDuplicateFun :: Env -> Id -> Bool
-noDuplicateFun (sig,context) id = case Map.lookup id sig of
-        (Just a) -> True
-        otherwise -> False        
-
 lookupFun :: Env -> Id -> Err ([Type], Type)
 lookupFun (sig,context) id = case Map.lookup id sig of
         (Just a) -> return a
@@ -125,37 +113,13 @@ newVar (sig,context) id typ = case Map.lookup id (head context) of
         (Just a) -> fail $ "Variable does already exists!"
         otherwise -> return $ (sig,(Map.insert id typ (head context)) : (tail context))
 
-updateVar :: Env -> Id -> Type -> Err Env
-updateVar (sig,context) id typ = case updateHelp context id of
-        (False,_) -> fail $ "TEST"
-        (True, ctx) -> case noDuplicateVar (sig,context) id of
-                True -> return $ (sig, ctx)
-                False -> fail $ "Variable with name " ++ (show id) ++ " has already been taken!"
-
-updateFun :: Env -> Id -> ([Type], Type) -> Err Env
-updateFun (sig,context) id fun = case Map.lookup id sig of
-        (Just a) -> return $ ((Map.update (return (Just fun)) id sig),context)
-        otherwise -> return $ ((Map.insert id fun sig),context)
-
-
-updateHelp :: [Context] -> Id -> (Bool,[Context])
-updateHelp []  _ = (False,[])
-updateHelp context id = case Map.lookup id (head context) of
-        (Just a) -> (True,(Map.update (return (Just a) ) id (head context)) : (tail context))
-        otherwise -> let (b, ctx) = updateHelp (tail context) id
-                     in (b, (head context) : ctx)
 
 newBlock :: Env -> Env
 newBlock (sig,context) = (sig, Map.empty : context)
 
-popBlock :: Env -> Env
-popBlock (sig,context) = (sig, (tail context))
-
 emptyEnv :: Env
 emptyEnv = (Map.empty,[])
 
---helper :: Eq a, Monad m => [a] -> [m a] -> Bool
---helper xs ys = undefined
 
 checkIncDec :: Env -> Id -> Err Type
 checkIncDec env id = do
