@@ -24,6 +24,7 @@ type Err = Except String
 
 type Sig = Map Ident Exp
 
+
 data Entry 
     = Clos Exp Env -- For call-by-name
     | Val Value -- For call-by-value
@@ -35,14 +36,14 @@ data Value
     | VClos Ident Exp Env
 
 data Cxt = Cxt
-    { cxtStrategy :: Strategy  -- ^ Evaluation strategy (fixed).
-    , cxtSig      :: Sig       -- ^ Binds function identifiers to expression.
-    , cxtEnv      :: Env       -- ^ Binds local variables to values.
+    { cxtStrategy :: Strategy  --  Evaluation strategy (fixed).
+    , cxtSig      :: Sig       --  Binds function identifiers to expression.
+    , cxtEnv      :: Env       --  Binds local variables to values.
     }
 
 interpret :: Strategy -> Program -> Err Integer
 interpret strategy (Prog defs (DMain mainExp)) = do
-    let defToSigEntry (DDef f xs e) = (f, foldr EAbs e xs)
+    let defToSigEntry (DDef fun args exp) = (fun, foldr EAbs exp args)
     let sig = Map.fromList (map defToSigEntry defs)
     let cxt = Cxt
             { cxtStrategy = strategy
@@ -55,10 +56,9 @@ interpret strategy (Prog defs (DMain mainExp)) = do
     case v of
         VInt i  -> return i
         VClos{} -> fail $ "main should return an integer"
-    
-
-newVar :: Cxt -> Ident -> Value -> Err Cxt
-newVar cxt id val = return $ (cxt {cxtEnv = Map.insert id (Val val) (cxtEnv cxt)})
+  
+newVar :: Cxt -> Ident -> Exp -> Err Cxt
+newVar cxt id exp = return $ (cxt {cxtSig = Map.insert id exp (cxtSig cxt)})
 
 
 eval :: Cxt -> Exp -> Err Value
@@ -72,59 +72,13 @@ eval cxt exp = case exp of
                 Nothing -> fail $ "unbound indentifier: " ++ printTree id
     EAbs id exp -> return $ VClos id exp (cxtEnv cxt)
     EAdd exp1 exp2 -> do
-        evale1 <- eval cxt exp1
-        case evale1 of
-            VInt i -> do
-                evale2 <- eval cxt exp2
-                case evale2 of
-                    VInt j -> return $ VInt(i+j)
-                    VClos id exp env -> case (cxtStrategy cxt) of
-                        CallByValue -> do
-                            VInt k <- eval cxt exp
-                            return $ VInt(i+k)
-                        CallByName -> do
-                            VInt h <- (eval cxt) (EVar id)
-                            return $ VInt(i+h)
-            VClos id exp env -> case (cxtStrategy cxt) of
-                CallByValue -> do
-                    VInt i <- eval cxt exp
-                    evale2 <- eval cxt exp2
-                    case evale2 of
-                        VInt j -> return $ VInt(i+j)
-                        VClos id exp env -> fail $ "Cant add two functions!"
-                CallByName -> do
-                    VInt h <- (eval cxt) (EVar id)
-                    evale2 <- eval cxt exp2
-                    case evale2 of
-                        VInt f -> return $ VInt(h+f)
-                        VClos id exp env -> fail $ "Cant add two functions!"
+        VInt i <- eval cxt exp1
+        VInt j <- eval cxt exp2
+        return $ VInt(i+j)
     ESub exp1 exp2 -> do
-        evale1 <- eval cxt exp1
-        case evale1 of
-            VInt i -> do
-                evale2 <- eval cxt exp2
-                case evale2 of
-                    VInt j -> return $ VInt(i-j)
-                    VClos id exp env -> case (cxtStrategy cxt) of
-                        CallByValue -> do
-                            VInt k <- eval cxt exp
-                            return $ VInt(i-k)
-                        CallByName -> do
-                            VInt h <- (eval cxt) (EVar id)
-                            return $ VInt(i-h)
-            VClos id exp env -> case (cxtStrategy cxt) of
-                CallByValue -> do
-                    VInt i <- eval cxt exp
-                    evale2 <- eval cxt exp2
-                    case evale2 of
-                        VInt j -> return $ VInt(i-j)
-                        VClos id exp env -> fail $ "Cant sub two functions!"
-                CallByName -> do
-                    VInt h <- (eval cxt) (EVar id)
-                    evale2 <- eval cxt exp2
-                    case evale2 of
-                        VInt f -> return $ VInt(h-f)
-                        VClos id exp env -> fail $ "Cant sub two functions!"
+        VInt i <- eval cxt exp1
+        VInt j <- eval cxt exp2
+        return $ VInt(i-j)
     ELt exp1 exp2 -> do
         VInt i <- eval cxt exp1
         VInt j <- eval cxt exp2
@@ -136,17 +90,17 @@ eval cxt exp = case exp of
         case ife of
             1 -> eval cxt thexp
             0 -> eval cxt elexp
-    EApp fun exp -> do
+    EApp fun exp1 -> do
         vf <- eval cxt fun
         case vf of
             VInt{} -> fail $ "application of a non-function"
-            VClos id exp env -> do
+            VClos id exp2 env -> do
                 case (cxtStrategy cxt) of
                     CallByValue -> do
-                        va <- eval cxt exp
-                        eval (cxt {cxtEnv = Map.insert id (Val va) env}) exp
+                        va <- eval cxt exp1
+                        eval (cxt {cxtEnv = Map.insert id (Val va) env}) exp2
                     CallByName -> do
-                        eval (cxt {cxtEnv = Map.insert id (Clos exp(cxtEnv cxt)) env }) exp
+                        eval (cxt {cxtEnv = Map.insert id (Clos exp(cxtEnv cxt)) env }) exp2
 
 
 
