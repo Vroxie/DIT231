@@ -25,6 +25,7 @@ type Err = Except String
 type Sig = Map Ident Exp
 
 
+
 data Entry 
     = Clos Exp Env -- For call-by-name
     | Val Value -- For call-by-value
@@ -55,7 +56,7 @@ interpret strategy (Prog defs (DMain mainExp)) = do
     -- Inspect the result.
     case v of
         VInt i  -> return i
-        VClos{} -> fail $ "main should return an integer"
+        VClos{} -> throwError $ "main should return an integer"
   
 newVar :: Cxt -> Ident -> Exp -> Err Cxt
 newVar cxt id exp = return $ (cxt {cxtSig = Map.insert id exp (cxtSig cxt)})
@@ -69,16 +70,24 @@ eval cxt exp = case exp of
             (Just entry) -> evalEntry cxt entry
             Nothing -> case Map.lookup id (cxtSig cxt) of
                 (Just body) -> eval (cxt {cxtEnv = Map.empty}) body
-                Nothing -> fail $ "unbound indentifier: " ++ printTree id
+                Nothing -> throwError $ "unbound indentifier: " ++ printTree id
     EAbs id exp -> return $ VClos id exp (cxtEnv cxt)
     EAdd exp1 exp2 -> do
-        VInt i <- eval cxt exp1
-        VInt j <- eval cxt exp2
-        return $ VInt(i+j)
+        v1 <- eval cxt exp1
+        v2 <- eval cxt exp2
+        case v1 of
+            VInt i -> case v2 of
+                VInt j -> return $ VInt(i+j)
+                VClos id exp env -> throwError $ "cant add functions!"
+            VClos id exp env -> throwError $ "cant add functions!"
     ESub exp1 exp2 -> do
-        VInt i <- eval cxt exp1
-        VInt j <- eval cxt exp2
-        return $ VInt(i-j)
+        v1 <- eval cxt exp1
+        v2 <- eval cxt exp2
+        case v1 of
+            VInt i -> case v2 of
+                VInt j -> return $ VInt(i-j)
+                VClos id exp env -> throwError $ "cant sub functions!"
+            VClos id exp env -> throwError $ "cant sub functions!"
     ELt exp1 exp2 -> do
         VInt i <- eval cxt exp1
         VInt j <- eval cxt exp2
@@ -93,14 +102,14 @@ eval cxt exp = case exp of
     EApp fun exp1 -> do
         vf <- eval cxt fun
         case vf of
-            VInt{} -> fail $ "application of a non-function"
+            VInt{} -> throwError $ "application of a non-function"
             VClos id exp2 env -> do
                 case (cxtStrategy cxt) of
                     CallByValue -> do
                         va <- eval cxt exp1
                         eval (cxt {cxtEnv = Map.insert id (Val va) env}) exp2
                     CallByName -> do
-                        eval (cxt {cxtEnv = Map.insert id (Clos exp(cxtEnv cxt)) env }) exp2
+                        eval (cxt {cxtEnv = Map.insert id (Clos exp1(cxtEnv cxt)) env }) exp2
 
 
 
